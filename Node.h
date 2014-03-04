@@ -5,75 +5,14 @@
 #include <boost/bind/bind.hpp>
 #include <boost/thread.hpp>
 #include <boost/smart_ptr.hpp>
+#include "MyMsgProtco.h"
+#include <deque>
+#include <fstream>
 
 using namespace std;
 using namespace boost::asio;
 using boost::asio::ip::tcp;  
 
-
-class session
-{
-public:
-	session(boost::asio::io_service& io_service)
-		: socket_(io_service)
-	{
-	}
-
-	tcp::socket& socket()
-	{
-		return socket_;
-	}
-
-	void start()
-	{
-		socket_.async_read_some(boost::asio::buffer(data_, max_length),
-			boost::bind(&session::handle_read, this,
-			boost::asio::placeholders::error,
-			boost::asio::placeholders::bytes_transferred));
-	}
-
-	void close()
-	{
-		socket_.close();
-	}
-
-private:
-	void handle_read(const boost::system::error_code& error,
-		size_t bytes_transferred)
-	{
-		if (!error)
-		{
-			boost::asio::async_write(socket_,
-				boost::asio::buffer(data_, bytes_transferred),
-				boost::bind(&session::handle_write, this,
-				boost::asio::placeholders::error));
-		}
-		else
-		{
-			delete this;
-		}
-	}
-
-	void handle_write(const boost::system::error_code& error)
-	{
-		if (!error)
-		{
-			socket_.async_read_some(boost::asio::buffer(data_, max_length),
-				boost::bind(&session::handle_read, this,
-				boost::asio::placeholders::error,
-				boost::asio::placeholders::bytes_transferred));
-		}
-		else
-		{
-			delete this;
-		}
-	}
-
-private:
-	tcp::socket socket_;
-	enum { max_length = 1024 };
-	char data_[max_length];
-};
 
 class CNode : public boost::enable_shared_from_this<CNode>
 	, boost::noncopyable
@@ -81,6 +20,7 @@ class CNode : public boost::enable_shared_from_this<CNode>
 public:
 	typedef boost::shared_ptr<CNode>nodeptr;
 	enum NodeType{NT_MASTER, NT_NORMAL};
+	friend class session;
 public:
 	CNode(boost::asio::io_service& io_service, short port)
 		: nt_(NT_NORMAL)
@@ -120,7 +60,9 @@ public:
 	string& GetIP();
 	void ScanNode();
 	void Start();
+	void AddLog(string log);
 	std::vector<string>& GetIPList();
+	std::deque<string>& GetLogList();
 	
 private:
 	NodeType nt_;
@@ -133,5 +75,167 @@ private:
 	tcp::acceptor acceptor_;
 	deadline_timer timer_;
 	std::vector<string> ip_list;
+	std::deque<string> log_list;
+};
+
+
+class session
+{
+public:
+	session(boost::asio::io_service& io_service, CNode* owner)
+		: socket_(io_service)
+		, owner_(owner)
+	{
+	}
+
+	tcp::socket& socket()
+	{
+		return socket_;
+	}
+
+	void start()
+	{
+		boost::asio::async_read(socket_,
+			boost::asio::buffer(data_in, 4),
+			boost::asio::transfer_exactly(4),
+			boost::bind(&session::handle_header, this, boost::asio::placeholders::error));
+
+		// 		socket_.async_read_some(boost::asio::buffer(data_out, max_length),
+		// 			boost::bind(&session::handle_read, this,
+		// 			boost::asio::placeholders::error,
+		// 			boost::asio::placeholders::bytes_transferred));
+	}
+
+	void close()
+	{
+		socket_.close();
+	}
+
+	void send_msg(MsgType mt, char* szbuf)
+	{
+		char* szresult = MyMsgProtco::EncodeMsg(mt, szbuf);
+		memcpy(data_out, szresult, strlen(szresult)+1);
+		delete []szresult;
+		szresult = NULL;
+		boost::asio::async_write(socket_,
+			boost::asio::buffer(data_out, strlen(data_out)+1),
+			boost::bind(&session::read_head, this,
+			boost::asio::placeholders::error));
+	}
+
+
+
+private:
+
+	void read_head(const boost::system::error_code& error)
+	{
+		if (!error)
+		{
+			boost::asio::async_read(socket_,
+				boost::asio::buffer(data_in, 4),
+				boost::asio::transfer_exactly(4),
+				boost::bind(&session::handle_header, this,
+				boost::asio::placeholders::error));
+		}
+	}
+
+	void handle_header(const boost::system::error_code& error)
+	{
+		if (!error)
+		{
+			char* stopstring;
+			int bytes_to_transfer = strtol(data_in, &stopstring, 16);
+			read_content(bytes_to_transfer-3, error);
+		}
+	}
+
+	void read_content(size_t bytes_to_transfer, const boost::system::error_code& error)
+	{
+		if (!error)
+		{
+			if (bytes_to_transfer > max_length)
+			{
+				boost::asio::async_read(socket_,
+					boost::asio::buffer(data_in, max_length),
+					boost::asio::transfer_exactly(max_length),
+					boost::bind(&session::read_content, this,
+					bytes_to_transfer-max_length,
+					boost::asio::placeholders::error));
+			}
+			else
+			{
+				boost::asio::async_read(socket_,
+					boost::asio::buffer(data_in, bytes_to_transfer),
+					boost::asio::transfer_exactly(bytes_to_transfer),
+					boost::bind(&session::handle_read, this,
+					boost::asio::placeholders::error));
+			}
+		}
+	}
+
+	void handle_read(const boost::system::error_code& error)
+	{
+		if (!error)
+		{
+			MsgType etype = MyMsgProtco::GetMsgType(data_in);
+			char* szresult = MyMsgProtco::DecodeMsg(data_in);
+			static int i = 0;
+			switch(etype)
+			{
+			case MT_MASTER:
+				char tmp[50];
+				sprintf(tmp, "log_%d.txt", ++i);
+				owner_->master_ip == socket_.remote_endpoint().address().to_string();
+				owner_->AddLog("已连接主节点"+owner_->master_ip);
+				outfile.open(tmp, ios::out);
+				outfile<<szresult<<endl;
+				outfile.close();
+				break;
+			case MT_PING:
+				break;
+			}
+			delete []szresult;
+			szresult = NULL;
+		}	
+	}
+
+	void handle_read(const boost::system::error_code& error,
+		size_t bytes_transferred)
+	{
+		if (!error)
+		{
+			boost::asio::async_write(socket_,
+				boost::asio::buffer(data_out, bytes_transferred),
+				boost::bind(&session::handle_write, this,
+				boost::asio::placeholders::error));
+		}
+		else
+		{
+			delete this;
+		}
+	}
+
+	void handle_write(const boost::system::error_code& error)
+	{
+		if (!error)
+		{
+			socket_.async_read_some(boost::asio::buffer(data_out, max_length),
+				boost::bind(&session::handle_read, this,
+				boost::asio::placeholders::error,
+				boost::asio::placeholders::bytes_transferred));
+		}
+		else
+		{
+			delete this;
+		}
+	}
+
+private:
+	tcp::socket socket_;
+	ofstream outfile;
+	enum { max_length = 1024 };
+	char data_out[1024];
+	char data_in[1024];
+	CNode* owner_;
 };
 

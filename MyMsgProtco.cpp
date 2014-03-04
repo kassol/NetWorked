@@ -13,7 +13,7 @@ MyMsgProtco::~MyMsgProtco(void)
 {
 }
 
-MyMsgProtco::MsgType MyMsgProtco::GetMsgType(char *szMsg)
+MsgType MyMsgProtco::GetMsgType(char *szMsg)
 {
 	char temp = szMsg[0];
 	if (temp>=48 && temp <= 57)
@@ -27,24 +27,24 @@ char* MyMsgProtco::EncodeMsg(MsgType mt, char *szMsg)
 {
 	int nType = 0;
 	int nstrlen = strlen(szMsg)+2+4;
-	char *temMsg = new char[nstrlen];
+	char *temMsg = new char[nstrlen+1];
 	switch(mt)
 	{
-	case MT_CONNECT:
+	case MT_MASTER:
 		nType = 0;
-		_snprintf_s(temMsg, nstrlen, nstrlen, "%04X%d%s", nstrlen, nType, szMsg);
+		_snprintf_s(temMsg, nstrlen+1, nstrlen+1, "%04X%02X%s", nstrlen, nType, szMsg);
+		break;
+	case MT_PING:
+		nType = 1;
+		_snprintf_s(temMsg, nstrlen+1, nstrlen+1, "%04X%02X%s", nstrlen, nType, szMsg);
 		break;
 	case MT_COMMAND:
-		nType = 1;
-		_snprintf_s(temMsg, nstrlen, nstrlen, "%04X%d%s", nstrlen, nType, szMsg);
+		nType = 2;
+		_snprintf_s(temMsg, nstrlen+1, nstrlen+1, "%04X%02X%s", nstrlen, nType, szMsg);
 		break;
 	case MT_FEEDBACK:
 		nType = 3;
-		_snprintf_s(temMsg, nstrlen, nstrlen, "%04X%d%s", nstrlen, nType, szMsg);
-		break;
-	case MT_HEARTBEAT:
-		nType = 4;
-		_snprintf_s(temMsg, nstrlen, nstrlen, "%04X%d%s", nstrlen, nType, szMsg);
+		_snprintf_s(temMsg, nstrlen+1, nstrlen+1, "%04X%02X%s", nstrlen, nType, szMsg);
 		break;
 	default:
 		break;
@@ -56,9 +56,6 @@ char* MyMsgProtco::DecodeMsg(char *szMsg)
 {
 	int nstrlen = strlen(szMsg);
 	char *tempMsg = new char[nstrlen];
-	for (int i = 0; i < nstrlen; i ++)
-	{
-		tempMsg[i] = szMsg[i+1];
-	}
+	memcpy(tempMsg, szMsg+2, nstrlen);
 	return tempMsg;
 }

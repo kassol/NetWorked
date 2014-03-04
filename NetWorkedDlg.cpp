@@ -148,6 +148,26 @@ void CNetWorkedDlg::OnBnClickedExit()
 	PostQuitMessage(0);
 }
 
+void scanlog(CNetWorkedDlg* pdlg)
+{
+	while(true)
+	{
+		std::deque<string> log_list(pdlg->pNode->GetLogList());
+		if (log_list.empty())
+		{
+			Sleep(100);
+			continue;
+		}
+		else
+		{
+			CString strMsg(log_list.front().c_str());
+			log_list.pop_front();
+			pdlg->AddMsg(strMsg);
+		}
+	}
+}
+
+
 void start_work(CNetWorkedDlg* pdlg)
 {
 	CString strMsg = _T("");
@@ -162,7 +182,6 @@ void start_work(CNetWorkedDlg* pdlg)
 			strMsg = _T("提升至主节点，扫描节点中，请稍后...");
 			pdlg->AddMsg(strMsg);
 			pdlg->pNode->ScanNode();
-
 
 			std::vector<string> ip_list(pdlg->pNode->GetIPList());
 			if (!ip_list.empty())
@@ -193,7 +212,7 @@ void start_work(CNetWorkedDlg* pdlg)
 	}
 	else if (!pdlg->pNode->IsConnected())
 	{
-		strMsg = _T("本机未连入网络");
+		strMsg = _T("本机无有效ip");
 		pdlg->AddMsg(strMsg);
 	}
 	else
@@ -232,7 +251,8 @@ void start_work(CNetWorkedDlg* pdlg)
 
 void CNetWorkedDlg::OnBnClickedStart()
 {
-	boost::thread thr(boost::bind(start_work, this)); 
+	boost::thread thr(boost::bind(start_work, this));
+	//boost::thread thr2(boost::bind(scanlog, this));
 }
 
 void CNetWorkedDlg::OnBnClickedClear()
