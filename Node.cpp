@@ -133,9 +133,6 @@ void CNode::start_scan()
 		boost::system::error_code error;
 		new_session->socket().async_connect(tcp::endpoint(boost::asio::ip::address::from_string(str_ip), listen_port),
 			boost::bind(&CNode::handle_connect, this, new_session, boost::asio::placeholders::error));
-		timer_.expires_from_now(boost::posix_time::milliseconds(10));
-		timer_.async_wait(boost::bind(&CNode::close_session, this, new_session));
-		Sleep(20);
 	}
 	delete []tmp;
 	tmp = NULL;
@@ -161,10 +158,9 @@ void CNode::handle_connect(session* new_session, const boost::system::error_code
 		ip_list.push_back(new_session->socket().remote_endpoint().address().to_string());
 		new_session->send_msg(MT_MASTER, const_cast<char*>(new_session->socket().remote_endpoint().address().to_string().c_str()));
 	}
+	else
+	{
+		delete new_session;
+	}
 }
 
-void CNode::close_session(session* new_session)
-{
-	new_session->close();
-	delete new_session;
-}

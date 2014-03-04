@@ -28,7 +28,6 @@ public:
 		, next_ip("")
 		, master_ip("")
 		, io_service_(io_service)
-		, timer_(io_service)
 		, listen_port(port)
 		, acceptor_(io_service, tcp::endpoint(tcp::v4(), port))
 	{
@@ -50,7 +49,6 @@ private:
 	void start_scan();
 	void handle_accept(session* new_session, const boost::system::error_code& error);
 	void handle_connect(session* new_session, const boost::system::error_code& error);
-	void close_session(session* new_session);
 
 public:
 	bool IsConnected();
@@ -73,7 +71,6 @@ private:
 	bool is_connected;
 	boost::asio::io_service& io_service_;
 	tcp::acceptor acceptor_;
-	deadline_timer timer_;
 	std::vector<string> ip_list;
 	std::deque<string> log_list;
 };
@@ -99,17 +96,8 @@ public:
 			boost::asio::buffer(data_in, 4),
 			boost::asio::transfer_exactly(4),
 			boost::bind(&session::handle_header, this, boost::asio::placeholders::error));
-
-		// 		socket_.async_read_some(boost::asio::buffer(data_out, max_length),
-		// 			boost::bind(&session::handle_read, this,
-		// 			boost::asio::placeholders::error,
-		// 			boost::asio::placeholders::bytes_transferred));
 	}
 
-	void close()
-	{
-		socket_.close();
-	}
 
 	void send_msg(MsgType mt, char* szbuf)
 	{
