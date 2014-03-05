@@ -179,8 +179,16 @@ private:
 	{
 		if (!error)
 		{
-			owner_->handle_msg(socket_.remote_endpoint().address().to_string(), data_in);
-
+			boost::system::error_code ec;
+			boost::asio::ip::tcp::endpoint endpoint = socket_.remote_endpoint(ec);
+			if (ec)
+			{
+				delete this;
+			}
+			else
+			{
+				owner_->handle_msg(endpoint.address().to_string(), data_in);
+			}
 		}
 		delete this;
 	}
