@@ -49,6 +49,7 @@ private:
 	void start_scan();
 	void handle_accept(session* new_session, const boost::system::error_code& error);
 	void handle_connect(session* new_session, const boost::system::error_code& error);
+	void handle_msg(string ip, const char* msg);
 
 public:
 	bool IsConnected();
@@ -73,6 +74,7 @@ private:
 	tcp::acceptor acceptor_;
 	std::vector<string> ip_list;
 	std::deque<string> log_list;
+	ofstream outfile;
 };
 
 
@@ -99,7 +101,7 @@ public:
 	}
 
 
-	void send_msg(MsgType mt, char* szbuf)
+	void send_msg(MsgType mt, const char* szbuf)
 	{
 		char* szresult = MyMsgProtco::EncodeMsg(mt, szbuf);
 		memcpy(data_out, szresult, strlen(szresult)+1);
@@ -177,35 +179,14 @@ private:
 	{
 		if (!error)
 		{
-			MsgType etype = MyMsgProtco::GetMsgType(data_in);
-			char* szresult = MyMsgProtco::DecodeMsg(data_in);
-			static int i = 0;
-			switch(etype)
-			{
-			case MT_MASTER:
-				char tmp[50];
-				sprintf(tmp, "log_%d.txt", ++i);
-				owner_->master_ip == socket_.remote_endpoint().address().to_string();
-				owner_->AddLog("已连接主节点"+owner_->master_ip);
-				outfile.open(tmp, ios::out);
-				outfile<<szresult<<endl;
-				outfile.close();
-				break;
-			case MT_PING:
-				break;
-			}
-			delete []szresult;
-			szresult = NULL;
+			owner_->handle_msg(socket_.remote_endpoint().address().to_string(), data_in);
+
 		}
-		else
-		{
-			delete this;
-		}
+		delete this;
 	}
 
 private:
 	tcp::socket socket_;
-	ofstream outfile;
 	enum { max_length = 1024 };
 	char data_out[1024];
 	char data_in[1024];

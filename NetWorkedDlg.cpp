@@ -18,6 +18,8 @@ int CNetWorkedDlg::_nPort = 8991;
 int CNetWorkedDlg::_nPackageSize = 1500;
 
 void run_service(boost::asio::io_service& service);
+void scanlog(CNetWorkedDlg* pdlg);
+void start_work(CNetWorkedDlg* pdlg);
 
 CNetWorkedDlg::CNetWorkedDlg(CWnd* pParent /*=NULL*/)
 	: CDialogEx(CNetWorkedDlg::IDD, pParent)
@@ -89,6 +91,7 @@ BOOL CNetWorkedDlg::OnInitDialog()
 	SetIcon(m_hIcon, FALSE);		// 设置小图标
 
 	// TODO: 在此添加额外的初始化代码
+	boost::thread thr(boost::bind(scanlog, this));
 
 	return TRUE;  // 除非将焦点设置到控件，否则返回 TRUE
 }
@@ -183,6 +186,8 @@ void start_work(CNetWorkedDlg* pdlg)
 			pdlg->AddMsg(strMsg);
 			pdlg->pNode->ScanNode();
 
+			Sleep(5000);
+
 			std::vector<string> &ip_list = pdlg->pNode->GetIPList();
 			if (!ip_list.empty())
 			{
@@ -251,7 +256,6 @@ void start_work(CNetWorkedDlg* pdlg)
 void CNetWorkedDlg::OnBnClickedStart()
 {
 	boost::thread thr(boost::bind(start_work, this));
-	boost::thread thr2(boost::bind(scanlog, this));
 }
 
 void CNetWorkedDlg::OnBnClickedClear()

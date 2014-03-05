@@ -165,7 +165,7 @@ void CNode::handle_connect(session* new_session, const boost::system::error_code
 		{
 			string ip = endpoint.address().to_string();
 			ip_list.push_back(ip);
-			new_session->send_msg(MT_MASTER, const_cast<char*>(ip.c_str()));
+			new_session->send_msg(MT_MASTER, ip.c_str());
 		}
 	}
 	else
@@ -174,3 +174,40 @@ void CNode::handle_connect(session* new_session, const boost::system::error_code
 	}
 }
 
+void CNode::handle_msg(string ip, const char* msg)
+{
+	MsgType etype = MyMsgProtco::GetMsgType(msg);
+	char* szresult = MyMsgProtco::DecodeMsg(msg);
+	static int i = 0;
+	switch(etype)
+	{
+	case MT_MASTER:
+		char tmp[50];
+		sprintf(tmp, "log_%d.txt", ++i);
+		if (IsMaster())
+		{
+
+		}
+		else
+		{
+			if (master_ip == "")
+			{
+				master_ip = ip;
+				AddLog("已连接主节点"+master_ip);
+				outfile.open(tmp, ios::out);
+				outfile<<szresult<<endl;
+				outfile.close();
+			}
+		}
+		break;
+	case MT_COMMAND:
+		break;
+	case MT_FEEDBACK:
+		AddLog(string(szresult));
+		break;
+	default:
+		break;
+	}
+	delete []szresult;
+	szresult = NULL;
+}
