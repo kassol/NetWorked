@@ -155,8 +155,18 @@ void CNode::handle_connect(session* new_session, const boost::system::error_code
 {
 	if (!error)
 	{
-		ip_list.push_back(new_session->socket().remote_endpoint().address().to_string());
-		new_session->send_msg(MT_MASTER, const_cast<char*>(new_session->socket().remote_endpoint().address().to_string().c_str()));
+		boost::system::error_code ec;
+		boost::asio::ip::tcp::endpoint endpoint = new_session->socket().remote_endpoint(ec);
+		if (ec)
+		{
+			delete new_session;
+		}
+		else
+		{
+			string ip = endpoint.address().to_string();
+			ip_list.push_back(ip);
+			new_session->send_msg(MT_MASTER, const_cast<char*>(ip.c_str()));
+		}
 	}
 	else
 	{
