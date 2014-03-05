@@ -125,6 +125,10 @@ private:
 				boost::bind(&session::handle_header, this,
 				boost::asio::placeholders::error));
 		}
+		else
+		{
+			delete this;
+		}
 	}
 
 	void handle_header(const boost::system::error_code& error)
@@ -134,6 +138,10 @@ private:
 			char* stopstring;
 			int bytes_to_transfer = strtol(data_in, &stopstring, 16);
 			read_content(bytes_to_transfer-3, error);
+		}
+		else
+		{
+			delete this;
 		}
 	}
 
@@ -158,6 +166,10 @@ private:
 					boost::bind(&session::handle_read, this,
 					boost::asio::placeholders::error));
 			}
+		}
+		else
+		{
+			delete this;
 		}
 	}
 
@@ -184,33 +196,6 @@ private:
 			}
 			delete []szresult;
 			szresult = NULL;
-		}	
-	}
-
-	void handle_read(const boost::system::error_code& error,
-		size_t bytes_transferred)
-	{
-		if (!error)
-		{
-			boost::asio::async_write(socket_,
-				boost::asio::buffer(data_out, bytes_transferred),
-				boost::bind(&session::handle_write, this,
-				boost::asio::placeholders::error));
-		}
-		else
-		{
-			delete this;
-		}
-	}
-
-	void handle_write(const boost::system::error_code& error)
-	{
-		if (!error)
-		{
-			socket_.async_read_some(boost::asio::buffer(data_out, max_length),
-				boost::bind(&session::handle_read, this,
-				boost::asio::placeholders::error,
-				boost::asio::placeholders::bytes_transferred));
 		}
 		else
 		{

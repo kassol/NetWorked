@@ -152,7 +152,7 @@ void scanlog(CNetWorkedDlg* pdlg)
 {
 	while(true)
 	{
-		std::deque<string> log_list(pdlg->pNode->GetLogList());
+		std::deque<string> &log_list = pdlg->pNode->GetLogList();
 		if (log_list.empty())
 		{
 			Sleep(100);
@@ -183,7 +183,7 @@ void start_work(CNetWorkedDlg* pdlg)
 			pdlg->AddMsg(strMsg);
 			pdlg->pNode->ScanNode();
 
-			std::vector<string> ip_list(pdlg->pNode->GetIPList());
+			std::vector<string> &ip_list = pdlg->pNode->GetIPList();
 			if (!ip_list.empty())
 			{
 				for_each(ip_list.begin(), ip_list.end(), [&pdlg, &strMsg] (string ip_)
@@ -219,14 +219,13 @@ void start_work(CNetWorkedDlg* pdlg)
 	{
 		strMsg = _T("已是主节点");
 		pdlg->AddMsg(strMsg);
-		std::vector<string> ip_list(pdlg->pNode->GetIPList());
+		std::vector<string> &ip_list = pdlg->pNode->GetIPList();
 		if (ip_list.empty())
 		{
 			strMsg = _T("扫描主机中，请稍后...");
 			pdlg->AddMsg(strMsg);
 			pdlg->pNode->ScanNode();
 
-			std::vector<string> ip_list(pdlg->pNode->GetIPList());
 			if (!ip_list.empty())
 			{
 				for_each(ip_list.begin(), ip_list.end(), [&pdlg, &strMsg] (string ip_)
@@ -252,7 +251,7 @@ void start_work(CNetWorkedDlg* pdlg)
 void CNetWorkedDlg::OnBnClickedStart()
 {
 	boost::thread thr(boost::bind(start_work, this));
-	//boost::thread thr2(boost::bind(scanlog, this));
+	boost::thread thr2(boost::bind(scanlog, this));
 }
 
 void CNetWorkedDlg::OnBnClickedClear()
