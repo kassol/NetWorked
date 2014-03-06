@@ -307,6 +307,7 @@ void CNetWorkedDlg::AddMsg(CString strMsg)
 	CString str = tm.Format("[%Y/%m/%d %H:%M:%S] ");
 	str += strMsg;
 	m_ctrlMsgList.InsertString(m_ctrlMsgList.GetCount(), str);
+	m_ctrlMsgList.SetTopIndex(max(m_ctrlMsgList.GetCount()-10, 0));
 }
 
 void CNetWorkedDlg::Log(CString strMsg)
