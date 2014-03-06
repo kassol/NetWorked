@@ -231,6 +231,8 @@ void start_work(CNetWorkedDlg* pdlg)
 			pdlg->AddMsg(strMsg);
 			pdlg->pNode->ScanNode();
 
+			Sleep(5000);
+
 			if (!ip_list.empty())
 			{
 				for_each(ip_list.begin(), ip_list.end(), [&pdlg, &strMsg] (string ip_)
