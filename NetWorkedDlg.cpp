@@ -33,6 +33,7 @@ CNetWorkedDlg::CNetWorkedDlg(CWnd* pParent /*=NULL*/)
 	{
 		AfxMessageBox(_T("Regist com library failed!"));
 	}
+	m_fs.open("log.txt", ios::out);
 	pNode = new CNode(service, _nPort);
 	boost::thread thrd(boost::bind(run_service, boost::ref(service)));
 }
@@ -44,6 +45,7 @@ void run_service(boost::asio::io_service& service)
 
 CNetWorkedDlg::~CNetWorkedDlg()
 {
+	m_fs.close();
 	service.stop();
 	delete pNode;
 	pNode = NULL;
@@ -166,6 +168,7 @@ void scanlog(CNetWorkedDlg* pdlg)
 			CString strMsg(log_list.front().c_str());
 			log_list.pop_front();
 			pdlg->AddMsg(strMsg);
+			pdlg->Log(strMsg);
 		}
 	}
 }
@@ -173,86 +176,88 @@ void scanlog(CNetWorkedDlg* pdlg)
 
 void start_work(CNetWorkedDlg* pdlg)
 {
-	CString strMsg = _T("");
+	pdlg->pNode->Start();
 
-	if (pdlg->pNode->IsConnected() && !pdlg->pNode->IsMaster())
-	{
-		strMsg = _T("本机IP是")+CString(pdlg->pNode->GetIP().c_str());
-		pdlg->AddMsg(strMsg);
-
-		if(pdlg->pNode->InCharge())
-		{
-			strMsg = _T("提升至主节点，扫描节点中，请稍后...");
-			pdlg->AddMsg(strMsg);
-			pdlg->pNode->ScanNode();
-
-			Sleep(5000);
-
-			std::vector<string> &ip_list = pdlg->pNode->GetIPList();
-			if (!ip_list.empty())
-			{
-				for_each(ip_list.begin(), ip_list.end(), [&pdlg, &strMsg] (string ip_)
-				{
-					strMsg = _T("已连接至 ")+CString(ip_.c_str());
-					pdlg->AddMsg(strMsg);
-
-				});
-
-
-				strMsg = _T("扫描完毕，开始分发任务");
-				pdlg->AddMsg(strMsg);
-				pdlg->pNode->Start();
-			}
-			else
-			{
-				strMsg = _T("未扫描到节点");
-				pdlg->AddMsg(strMsg);
-			}
-		}
-		else
-		{
-			strMsg = _T("提升至主节点失败");
-			pdlg->AddMsg(strMsg);
-		}
-	}
-	else if (!pdlg->pNode->IsConnected())
-	{
-		strMsg = _T("本机无有效ip");
-		pdlg->AddMsg(strMsg);
-	}
-	else
-	{
-		strMsg = _T("已是主节点");
-		pdlg->AddMsg(strMsg);
-		std::vector<string> &ip_list = pdlg->pNode->GetIPList();
-		if (ip_list.empty())
-		{
-			strMsg = _T("扫描主机中，请稍后...");
-			pdlg->AddMsg(strMsg);
-			pdlg->pNode->ScanNode();
-
-			Sleep(5000);
-
-			if (!ip_list.empty())
-			{
-				for_each(ip_list.begin(), ip_list.end(), [&pdlg, &strMsg] (string ip_)
-				{
-					strMsg = _T("已连接至 ")+CString(ip_.c_str());
-					pdlg->AddMsg(strMsg);
-
-				});
-
-				strMsg = _T("已提升至主节点，开始分发任务");
-				pdlg->AddMsg(strMsg);
-				pdlg->pNode->Start();
-			}
-			else
-			{
-				strMsg = _T("未扫描到主机");
-				pdlg->AddMsg(strMsg);
-			}
-		}
-	}
+// 	CString strMsg = _T("");
+// 
+// 	if (pdlg->pNode->IsConnected() && !pdlg->pNode->IsMaster())
+// 	{
+// 		strMsg = _T("本机IP是")+CString(pdlg->pNode->GetIP().c_str());
+// 		pdlg->AddMsg(strMsg);
+// 
+// 		if(pdlg->pNode->InCharge())
+// 		{
+// 			strMsg = _T("提升至主节点，扫描节点中，请稍后...");
+// 			pdlg->AddMsg(strMsg);
+// 			pdlg->pNode->ScanNode();
+// 
+// 			Sleep(5000);
+// 
+// 			std::vector<string> &ip_list = pdlg->pNode->GetIPList();
+// 			if (!ip_list.empty())
+// 			{
+// 				for_each(ip_list.begin(), ip_list.end(), [&pdlg, &strMsg] (string ip_)
+// 				{
+// 					strMsg = _T("已连接至 ")+CString(ip_.c_str());
+// 					pdlg->AddMsg(strMsg);
+// 
+// 				});
+// 
+// 
+// 				strMsg = _T("扫描完毕，开始分发任务");
+// 				pdlg->AddMsg(strMsg);
+// 				pdlg->pNode->Start();
+// 			}
+// 			else
+// 			{
+// 				strMsg = _T("未扫描到节点");
+// 				pdlg->AddMsg(strMsg);
+// 			}
+// 		}
+// 		else
+// 		{
+// 			strMsg = _T("提升至主节点失败");
+// 			pdlg->AddMsg(strMsg);
+// 		}
+// 	}
+// 	else if (!pdlg->pNode->IsConnected())
+// 	{
+// 		strMsg = _T("本机无有效ip");
+// 		pdlg->AddMsg(strMsg);
+// 	}
+// 	else
+// 	{
+// 		strMsg = _T("已是主节点");
+// 		pdlg->AddMsg(strMsg);
+// 		std::vector<string> &ip_list = pdlg->pNode->GetIPList();
+// 		if (ip_list.empty())
+// 		{
+// 			strMsg = _T("扫描主机中，请稍后...");
+// 			pdlg->AddMsg(strMsg);
+// 			pdlg->pNode->ScanNode();
+// 
+// 			Sleep(5000);
+// 
+// 			if (!ip_list.empty())
+// 			{
+// 				for_each(ip_list.begin(), ip_list.end(), [&pdlg, &strMsg] (string ip_)
+// 				{
+// 					strMsg = _T("已连接至 ")+CString(ip_.c_str());
+// 					pdlg->AddMsg(strMsg);
+// 
+// 				});
+// 
+// 				strMsg = _T("已提升至主节点，开始分发任务");
+// 				pdlg->AddMsg(strMsg);
+// 				pdlg->pNode->Start();
+// 			}
+// 			else
+// 			{
+// 				strMsg = _T("未扫描到主机");
+// 				pdlg->AddMsg(strMsg);
+// 			}
+// 		}
+// 	}
 }
 
 void CNetWorkedDlg::OnBnClickedStart()
@@ -302,6 +307,15 @@ void CNetWorkedDlg::AddMsg(CString strMsg)
 	CString str = tm.Format("[%Y/%m/%d %H:%M:%S] ");
 	str += strMsg;
 	m_ctrlMsgList.InsertString(m_ctrlMsgList.GetCount(), str);
+}
+
+void CNetWorkedDlg::Log(CString strMsg)
+{
+	CTime tm = CTime::GetCurrentTime();
+	CString str = tm.Format("[%Y/%m/%d %H:%M:%S] ");
+	str += strMsg;
+	USES_CONVERSION;
+	m_fs<<T2A(str)<<endl;
 }
 
 bool CNetWorkedDlg::IsMaster()

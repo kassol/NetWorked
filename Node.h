@@ -30,11 +30,16 @@ public:
 		, io_service_(io_service)
 		, listen_port(port)
 		, acceptor_(io_service, tcp::endpoint(tcp::v4(), port))
+		, is_scan_finished(true)
 	{
 		is_connected = Initialize();
 		if (is_connected)
 		{
 			start_accept();
+		}
+		else
+		{
+			AddLog("ÎÞÓÐÐ§IP");
 		}
 
 	}
@@ -49,15 +54,16 @@ private:
 	void start_scan();
 	void handle_accept(session* new_session, const boost::system::error_code& error);
 	void handle_connect(session* new_session, const boost::system::error_code& error);
+	void handle_connect_msg(session* new_session, MsgType mt, const char* szbuf, const boost::system::error_code& error);
 	void handle_msg(string ip, const char* msg);
 
 public:
 	bool IsConnected();
+	bool IsScanFinished();
 	bool IsMaster();
 	bool InCharge();
 	NodeType GetNodeType();
 	string& GetIP();
-	void ScanNode();
 	void Start();
 	void AddLog(string log);
 	std::vector<string>& GetIPList();
@@ -70,9 +76,11 @@ private:
 	string master_ip;
 	int listen_port;
 	bool is_connected;
+	bool is_scan_finished;
 	boost::asio::io_service& io_service_;
 	tcp::acceptor acceptor_;
 	std::vector<string> ip_list;
+	std::vector<string> available_list;
 	std::deque<string> log_list;
 	ofstream outfile;
 };

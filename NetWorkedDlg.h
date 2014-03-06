@@ -40,6 +40,7 @@ protected:
 private:
 	IImageX* m_pImage;
 	CConfigDlg* m_pConfDlg;
+	fstream m_fs;
 	static int _nPort;
 	static int _nPackageSize;
 	static void SetPort(int nPort);
@@ -51,6 +52,7 @@ public:
 
 public:
 	void AddMsg(CString strMsg);
+	void Log(CString strMsg);
 	bool IsMaster();
 
 
