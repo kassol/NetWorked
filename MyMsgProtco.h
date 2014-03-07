@@ -13,6 +13,7 @@ enum MsgType
 	MT_FILE_FAIL,
 	MT_COMMAND,
 	MT_FEEDBACK,
+	MT_PING,
 	MT_ERROR
 };
 

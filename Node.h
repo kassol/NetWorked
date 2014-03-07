@@ -31,6 +31,7 @@ public:
 		, listen_port(port)
 		, acceptor_(io_service, tcp::endpoint(tcp::v4(), port))
 		, is_scan_finished(true)
+		, is_ping_busy(false)
 	{
 		is_connected = Initialize();
 		if (is_connected)
@@ -52,9 +53,10 @@ private:
 private:
 	void start_accept();
 	void start_scan();
+	void start_ping();
 	void handle_accept(session* new_session, const boost::system::error_code& error);
 	void handle_connect(session* new_session, const boost::system::error_code& error);
-	void handle_connect_msg(session* new_session, MsgType mt, const char* szbuf, const boost::system::error_code& error);
+	void handle_connect_msg(session* new_session, string ip, MsgType mt, const char* szbuf, const boost::system::error_code& error);
 	void handle_msg(string ip, const char* msg);
 
 public:
@@ -77,6 +79,7 @@ private:
 	int listen_port;
 	bool is_connected;
 	bool is_scan_finished;
+	bool is_ping_busy;
 	boost::asio::io_service& io_service_;
 	tcp::acceptor acceptor_;
 	std::vector<string> ip_list;

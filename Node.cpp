@@ -67,13 +67,12 @@ bool CNode::InCharge()
 
 void CNode::AddNodes()
 {
-	available_list.clear();
 	session* new_session = NULL;
 	for_each(ip_list.begin(), ip_list.end(), [&](string ip)
 	{
 		new_session = new session(io_service_, this);
 		new_session->socket().async_connect(boost::asio::ip::tcp::endpoint(boost::asio::ip::address::from_string(ip), listen_port),
-			boost::bind(&CNode::handle_connect_msg, this, new_session, MT_MASTER, "", boost::asio::placeholders::error));
+			boost::bind(&CNode::handle_connect_msg, this, new_session, ip, MT_MASTER, "", boost::asio::placeholders::error));
 	});
 }
 
@@ -152,6 +151,10 @@ void CNode::Start()
 
 	Sleep(2000);
 
+	if (!is_ping_busy)
+	{
+		start_ping();
+	}
 
 	
 }
@@ -188,6 +191,25 @@ void CNode::start_scan()
 	}
 	delete []tmp;
 	tmp = NULL;
+}
+
+void CNode::start_ping()
+{
+	is_ping_busy = true;
+	session* new_session = NULL;
+	while(is_ping_busy)
+	{
+		while (!available_list.empty())
+		{
+			for_each(available_list.begin(), available_list.end(), [&](string ip)
+			{
+				new_session = new session(io_service_, this);
+				new_session->socket().async_connect(tcp::endpoint(boost::asio::ip::address::from_string(ip), listen_port),
+					boost::bind(&CNode::handle_connect_msg, this, new_session, ip, MT_PING, "", boost::asio::placeholders::error));
+			});
+			Sleep(5000);
+		}
+	}
 }
 
 void CNode::handle_accept(session* new_session, const boost::system::error_code& error)
@@ -235,14 +257,31 @@ void CNode::handle_connect(session* new_session, const boost::system::error_code
 	}
 }
 
-void CNode::handle_connect_msg(session* new_session, MsgType mt, const char* szbuf, const boost::system::error_code& error)
+void CNode::handle_connect_msg(session* new_session, string ip, MsgType mt, const char* szbuf, const boost::system::error_code& error)
 {
 	if (!error)
 	{
-		new_session->send_msg(mt, szbuf);
+		if (mt != MT_PING)
+		{
+			new_session->send_msg(mt, szbuf);
+		}
+		else
+		{
+			delete new_session;
+		}
 	}
 	else
 	{
+		if (mt == MT_PING)
+		{
+			std::vector<string>::iterator ite = std::find(available_list.begin(),
+				available_list.end(), ip);
+			if (ite != available_list.end())
+			{
+				available_list.erase(ite);
+				AddLog("丢失到"+ip+"的连接");
+			}
+		}
 		delete new_session;
 	}
 }
@@ -260,7 +299,7 @@ void CNode::handle_msg(string ip, const char* msg)
 		{
 			session* new_session = new session(io_service_, this);
 			new_session->socket().async_connect(tcp::endpoint(boost::asio::ip::address::from_string(ip), listen_port),
-				boost::bind(&CNode::handle_connect_msg, this, new_session, MT_FAIL, "", boost::asio::placeholders::error));
+				boost::bind(&CNode::handle_connect_msg, this, new_session, ip, MT_FAIL, ip_.c_str(), boost::asio::placeholders::error));
 		}
 		else
 		{
@@ -270,13 +309,13 @@ void CNode::handle_msg(string ip, const char* msg)
 				AddLog("已连接主节点"+master_ip);
 				session* new_session = new session(io_service_, this);
 				new_session->socket().async_connect(tcp::endpoint(boost::asio::ip::address::from_string(ip), listen_port),
-					boost::bind(&CNode::handle_connect_msg, this, new_session, MT_SUCCESS, "", boost::asio::placeholders::error));
+					boost::bind(&CNode::handle_connect_msg, this, new_session, ip, MT_SUCCESS, "", boost::asio::placeholders::error));
 			}
 			else
 			{
 				session* new_session = new session(io_service_, this);
 				new_session->socket().async_connect(tcp::endpoint(boost::asio::ip::address::from_string(ip), listen_port),
-					boost::bind(&CNode::handle_connect_msg, this, new_session, MT_FAIL, master_ip.c_str(), boost::asio::placeholders::error));
+					boost::bind(&CNode::handle_connect_msg, this, new_session, ip, MT_FAIL, master_ip.c_str(), boost::asio::placeholders::error));
 			}
 		}
 		break;
@@ -286,17 +325,12 @@ void CNode::handle_msg(string ip, const char* msg)
 		if (ite == available_list.end())
 		{
 			available_list.push_back(ip);
+			AddLog("添加从节点"+ip);
 		}
-		AddLog("添加从节点"+ip);
 		break;
 	case MT_FAIL:
 		if (ip_ == string(szresult))
 		{
-			ite = std::find(available_list.begin(), available_list.end(), ip);
-			if (ite == available_list.end())
-			{
-				available_list.push_back(ip);
-			}
 			AddLog("节点"+ip+"已是本机从节点");
 		}
 		else
