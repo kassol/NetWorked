@@ -76,6 +76,48 @@ void CNode::AddNodes()
 	});
 }
 
+void CNode::ParseProj()
+{
+	task_struct task("C:\\test.tfw", 0);
+	task_list.push_back(task);
+}
+
+void CNode::Distribute()
+{
+	session* new_session = NULL;
+	string strmsg;
+	size_t i = 0;
+	for_each(task_list.begin(), task_list.end(), [&](task_struct task)
+	{
+		new_session = new session(io_service_, this);
+		char filesize[50] = "";
+		_snprintf_s(filesize, 50, 50, "%016X", boost::filesystem::file_size(task.task_));
+		string filename = task.task_.substr(task.task_.rfind('\\')+1, task.task_.size()-task.task_.rfind('\\')-1);
+		strmsg = filesize+filename;
+		while (i < available_list.size())
+		{
+			if (!available_list.at(i).is_busy)
+			{
+				new_session = new session(io_service_, this);
+				task.state_ = 1;
+				task.ip_ = available_list.at(i).ip_;
+				new_session->socket().async_connect(
+					tcp::endpoint(boost::asio::ip::address::from_string(available_list.at(i).ip_), listen_port),
+					boost::bind(&CNode::handle_connect_msg, this, new_session, available_list.at(i).ip_, 
+					MT_METAFILE, strmsg.c_str(), boost::asio::placeholders::error));
+				i = (i+1)%available_list.size();
+				break;
+			}
+			i = (i+1)%available_list.size();
+		}
+	});
+}
+
+void CNode::Work()
+{
+	is_busy = true;
+}
+
 void CNode::AddLog(string log)
 {
 	log_list.push_back(log);
@@ -84,6 +126,11 @@ void CNode::AddLog(string log)
 CNode::NodeType CNode::GetNodeType()
 {
 	return nt_;
+}
+
+int CNode::GetNodeNum()
+{
+	return available_list.size();
 }
 
 string& CNode::GetIP()
@@ -114,7 +161,7 @@ void CNode::Start()
 		return;
 	}
 	
-	AddLog("扫描节点中，请稍后...");
+	AddLog("扫描节点中，请稍候...");
 
 	start_scan();
 
@@ -129,7 +176,7 @@ void CNode::Start()
 		return;
 	}
 
-	AddLog("添加从节点中，请稍后...");
+	AddLog("添加从节点中，请稍候...");
 
 	Sleep(2000);
 
@@ -151,12 +198,24 @@ void CNode::Start()
 
 	Sleep(2000);
 
-	if (!is_ping_busy)
-	{
-		start_ping();
-	}
+// 	if (!is_ping_busy)
+// 	{
+// 		boost::thread thrd(boost::bind(&CNode::start_ping, this));
+// 	}
 
+	Sleep(2000);
 	
+	AddLog("解析任务中，请稍候...");
+
+	ParseProj();
+
+	Sleep(2000);
+
+	AddLog("分配任务中，请稍候...");
+
+	Distribute();
+
+	AddLog("任务分配完成");
 }
 
 void CNode::start_accept()
@@ -201,11 +260,11 @@ void CNode::start_ping()
 	{
 		while (!available_list.empty())
 		{
-			for_each(available_list.begin(), available_list.end(), [&](string ip)
+			for_each(available_list.begin(), available_list.end(), [&](node_struct node)
 			{
 				new_session = new session(io_service_, this);
-				new_session->socket().async_connect(tcp::endpoint(boost::asio::ip::address::from_string(ip), listen_port),
-					boost::bind(&CNode::handle_connect_msg, this, new_session, ip, MT_PING, "", boost::asio::placeholders::error));
+				new_session->socket().async_connect(tcp::endpoint(boost::asio::ip::address::from_string(node.ip_), listen_port),
+					boost::bind(&CNode::handle_connect_msg, this, new_session, node.ip_, MT_PING, "", boost::asio::placeholders::error));
 			});
 			Sleep(5000);
 		}
@@ -223,6 +282,59 @@ void CNode::handle_accept(session* new_session, const boost::system::error_code&
 		delete new_session;
 	}
 	start_accept();
+}
+
+void CNode::handle_accept_file(session* new_session, string filename, long filesize, const boost::system::error_code& error)
+{
+	if (!error)
+	{
+		AddLog("成功连接");
+		new_session->recv_file(filename, filesize);
+	}
+	else
+	{
+		AddLog("监听失败");
+		delete new_session;
+
+		
+		unsigned short file_port = 8999;
+		tcp::acceptor file_acceptor(io_service_, tcp::endpoint(tcp::v4(), file_port));
+		new_session = new session(io_service_, this);
+		file_acceptor.async_accept(new_session->socket(),
+			boost::bind(&CNode::handle_accept_file, this, new_session, filename, filesize, boost::asio::placeholders::error));
+		AddLog("开启监听8999端口");
+	}
+}
+
+void CNode::send_metafile(session* new_session, string ip, unsigned short file_port, const boost::system::error_code& error)
+{
+	if (!error)
+	{
+		string task_path;
+		for (size_t i = 0; i < task_list.size(); ++i)
+		{
+			if (task_list.at(i).ip_ == ip)
+			{
+				task_path == task_list.at(i).task_;
+				break;
+			}
+		}
+		if (task_path == "")
+		{
+			delete new_session;
+			return;
+		}
+		new_session->send_file(task_path, (unsigned long)boost::filesystem::file_size(task_path));
+	}
+	else
+	{
+		AddLog("连接失败");
+		delete new_session;
+		new_session = new session(io_service_, this);
+		new_session->socket().async_connect(tcp::endpoint(boost::asio::ip::address::from_string(ip), file_port),
+			boost::bind(&CNode::send_metafile, this, new_session, ip, file_port, boost::asio::placeholders::error));
+		AddLog("重新连接");
+	}
 }
 
 void CNode::handle_connect(session* new_session, const boost::system::error_code& error)
@@ -261,21 +373,14 @@ void CNode::handle_connect_msg(session* new_session, string ip, MsgType mt, cons
 {
 	if (!error)
 	{
-		if (mt != MT_PING)
-		{
-			new_session->send_msg(mt, szbuf);
-		}
-		else
-		{
-			delete new_session;
-		}
+		new_session->send_msg(mt, szbuf);
 	}
 	else
 	{
 		if (mt == MT_PING)
 		{
-			std::vector<string>::iterator ite = std::find(available_list.begin(),
-				available_list.end(), ip);
+			std::vector<node_struct>::iterator ite = std::find(available_list.begin(),
+				available_list.end(), node_struct(ip));
 			if (ite != available_list.end())
 			{
 				available_list.erase(ite);
@@ -291,70 +396,135 @@ void CNode::handle_msg(string ip, const char* msg)
 	MsgType etype = MyMsgProtco::GetMsgType(msg);
 	char* szresult = MyMsgProtco::DecodeMsg(msg);
 	static int i = 0;
-	std::vector<string>::iterator ite;
+	std::vector<node_struct>::iterator ite;
+	session* new_session = NULL;
 	switch(etype)
 	{
 	case MT_MASTER:
-		if (IsMaster())
 		{
-			session* new_session = new session(io_service_, this);
-			new_session->socket().async_connect(tcp::endpoint(boost::asio::ip::address::from_string(ip), listen_port),
-				boost::bind(&CNode::handle_connect_msg, this, new_session, ip, MT_FAIL, ip_.c_str(), boost::asio::placeholders::error));
-		}
-		else
-		{
-			if (master_ip == "")
+			if (IsMaster())
 			{
-				master_ip = ip;
-				AddLog("已连接主节点"+master_ip);
-				session* new_session = new session(io_service_, this);
+				new_session = new session(io_service_, this);
 				new_session->socket().async_connect(tcp::endpoint(boost::asio::ip::address::from_string(ip), listen_port),
-					boost::bind(&CNode::handle_connect_msg, this, new_session, ip, MT_SUCCESS, "", boost::asio::placeholders::error));
+					boost::bind(&CNode::handle_connect_msg, this, new_session, "", MT_FAIL, ip_.c_str(), boost::asio::placeholders::error));
 			}
 			else
 			{
-				session* new_session = new session(io_service_, this);
-				new_session->socket().async_connect(tcp::endpoint(boost::asio::ip::address::from_string(ip), listen_port),
-					boost::bind(&CNode::handle_connect_msg, this, new_session, ip, MT_FAIL, master_ip.c_str(), boost::asio::placeholders::error));
+				if (master_ip == "")
+				{
+					master_ip = ip;
+					AddLog("已连接主节点"+master_ip);
+					session* new_session = new session(io_service_, this);
+					new_session->socket().async_connect(tcp::endpoint(boost::asio::ip::address::from_string(ip), listen_port),
+						boost::bind(&CNode::handle_connect_msg, this, new_session, "", MT_SUCCESS, "", boost::asio::placeholders::error));
+				}
+				else
+				{
+					session* new_session = new session(io_service_, this);
+					new_session->socket().async_connect(tcp::endpoint(boost::asio::ip::address::from_string(ip), listen_port),
+						boost::bind(&CNode::handle_connect_msg, this, new_session, "", MT_FAIL, master_ip.c_str(), boost::asio::placeholders::error));
+				}
 			}
+			break;
 		}
-		break;
-
 	case MT_SUCCESS:
-		ite = std::find(available_list.begin(), available_list.end(), ip);
-		if (ite == available_list.end())
 		{
-			available_list.push_back(ip);
-			AddLog("添加从节点"+ip);
+			ite = std::find(available_list.begin(), available_list.end(), node_struct(ip));
+			if (ite == available_list.end())
+			{
+				available_list.push_back(node_struct(ip));
+				AddLog("添加从节点"+ip);
+			}
+			break;
 		}
-		break;
 	case MT_FAIL:
-		if (ip_ == string(szresult))
 		{
-			AddLog("节点"+ip+"已是本机从节点");
+			if (ip_ == string(szresult))
+			{
+				AddLog("节点"+ip+"已是本机从节点");
+			}
+			else
+			{
+				AddLog("节点"+ip+"无法成为本机从节点");
+			}
+			break;
 		}
-		else
-		{
-			AddLog("节点"+ip+"无法成为本机从节点");
-		}
-		break;
 	case MT_METAFILE:
-		break;
+		{
+			char* pathname;
+			unsigned long filesize = strtoul(szresult, &pathname, 16);
+			unsigned short file_port = 8999;
+			tcp::acceptor file_acceptor(io_service_, tcp::endpoint(tcp::v4(), file_port));
+			new_session = new session(io_service_, this);
+			file_acceptor.async_accept(new_session->socket(),
+				boost::bind(&CNode::handle_accept_file, this, new_session, pathname, filesize, boost::asio::placeholders::error));
+			AddLog("开启监听8999端口");
+			new_session = new session(io_service_, this);
+			char* pfileport = new char[5];
+			memset(pfileport, 0, 5);
+			_snprintf_s(pfileport, 5, 5, "%04X", file_port);
+			new_session->socket().async_connect(tcp::endpoint(boost::asio::ip::address::from_string(ip), listen_port),
+				boost::bind(&CNode::handle_connect_msg, this, new_session, "", MT_METAFILE_READY, pfileport, boost::asio::placeholders::error));
+			break;
+		}
 	case MT_METAFILE_READY:
-		break;
+		{
+			char* rest;
+			unsigned short file_port = (unsigned short)strtoul(szresult, &rest, 16);
+			new_session = new session(io_service_, this);
+			new_session->socket().async_connect(tcp::endpoint(boost::asio::ip::address::from_string(ip), file_port),
+				boost::bind(&CNode::send_metafile, this, new_session, ip, file_port, boost::asio::placeholders::error));
+			AddLog("连接节点");
+			break;
+		}
 	case MT_METAFILE_FAIL:
-		break;
+		{
+			break;
+		}
 	case MT_FILE:
-		break;
+		{
+			break;
+		}
 	case MT_FILE_READY:
-		break;
+		{
+			break;
+		}
 	case MT_FILE_FAIL:
-		break;
+		{
+			break;
+		}
 	case MT_COMMAND:
-		break;
+		{
+			break;
+		}
 	case MT_FEEDBACK:
-		AddLog(string(szresult));
-		break;
+		{
+			AddLog(string(szresult));
+			break;
+		}
+	case MT_PING:
+		{
+			new_session = new session(io_service_, this);
+			new_session->socket().async_connect(tcp::endpoint(boost::asio::ip::address::from_string(ip), listen_port),
+				boost::bind(&CNode::handle_connect_msg, this, new_session, ip, MT_PINGBACK, is_busy ? "-1" : "1", boost::asio::placeholders::error));
+			break;
+		}
+	case MT_PINGBACK:
+		{
+			ite = std::find(available_list.begin(), available_list.end(), node_struct(ip));
+			if (ite != available_list.end())
+			{
+				if (szresult == "-1")
+				{
+					ite->is_busy = true;
+				}
+				else if (szresult == "1")
+				{
+					ite->is_busy = false;
+				}
+			}
+			break;
+		}
 	default:
 		break;
 	}

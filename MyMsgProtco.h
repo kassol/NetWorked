@@ -14,6 +14,7 @@ enum MsgType
 	MT_COMMAND,
 	MT_FEEDBACK,
 	MT_PING,
+	MT_PINGBACK,
 	MT_ERROR
 };
 

@@ -5,14 +5,45 @@
 #include <boost/bind/bind.hpp>
 #include <boost/thread.hpp>
 #include <boost/smart_ptr.hpp>
+#include <boost/filesystem.hpp>
 #include "MyMsgProtco.h"
 #include <deque>
 #include <fstream>
 
 using namespace std;
 using namespace boost::asio;
-using boost::asio::ip::tcp;  
+using boost::asio::ip::tcp;
 
+
+struct task_struct 
+{
+	task_struct(string task, unsigned int state)
+		: task_(task)
+		, state_(state)
+	{
+		ip_ = "";
+	}
+
+	string task_;
+	unsigned int state_;
+	string ip_;
+};
+
+struct node_struct
+{
+	node_struct(string ip)
+		: ip_(ip)
+	{
+		is_busy = false;
+	}
+	string ip_;
+	bool is_busy;
+
+	bool operator==(const node_struct& node)
+	{
+		return node.ip_==ip_;
+	}
+};
 
 class CNode : public boost::enable_shared_from_this<CNode>
 	, boost::noncopyable
@@ -22,7 +53,7 @@ public:
 	enum NodeType{NT_MASTER, NT_NORMAL};
 	friend class session;
 public:
-	CNode(boost::asio::io_service& io_service, short port)
+	CNode(boost::asio::io_service& io_service, unsigned short port)
 		: nt_(NT_NORMAL)
 		, ip_("")
 		, next_ip("")
@@ -32,6 +63,7 @@ public:
 		, acceptor_(io_service, tcp::endpoint(tcp::v4(), port))
 		, is_scan_finished(true)
 		, is_ping_busy(false)
+		, is_busy(false)
 	{
 		is_connected = Initialize();
 		if (is_connected)
@@ -49,15 +81,20 @@ public:
 private:
 	bool Initialize();
 	void AddNodes();
+	void ParseProj();
+	void Distribute();
+	void Work();
 
 private:
 	void start_accept();
 	void start_scan();
 	void start_ping();
 	void handle_accept(session* new_session, const boost::system::error_code& error);
+	void handle_accept_file(session* new_session, string filename, long filesize, const boost::system::error_code& error);
 	void handle_connect(session* new_session, const boost::system::error_code& error);
 	void handle_connect_msg(session* new_session, string ip, MsgType mt, const char* szbuf, const boost::system::error_code& error);
 	void handle_msg(string ip, const char* msg);
+	void send_metafile(session* new_session, string ip, unsigned short file_port, const boost::system::error_code& error);
 
 public:
 	bool IsConnected();
@@ -65,6 +102,7 @@ public:
 	bool IsMaster();
 	bool InCharge();
 	NodeType GetNodeType();
+	int GetNodeNum();
 	string& GetIP();
 	void Start();
 	void AddLog(string log);
@@ -76,15 +114,17 @@ private:
 	string ip_;
 	string next_ip;
 	string master_ip;
-	int listen_port;
+	unsigned short listen_port;
 	bool is_connected;
 	bool is_scan_finished;
 	bool is_ping_busy;
+	bool is_busy;
 	boost::asio::io_service& io_service_;
 	tcp::acceptor acceptor_;
 	std::vector<string> ip_list;
-	std::vector<string> available_list;
+	std::vector<node_struct> available_list;
 	std::deque<string> log_list;
+	std::vector<task_struct> task_list;
 	ofstream outfile;
 };
 
@@ -111,6 +151,53 @@ public:
 			boost::bind(&session::handle_header, this, boost::asio::placeholders::error));
 	}
 
+	void recv_file(string filename, unsigned long filesize)
+	{
+		file.open(filename, ios::out|ios::binary);
+		if (filesize > max_length)
+		{
+			boost::asio::async_read(socket_,
+				boost::asio::buffer(data_in, max_length),
+				boost::asio::transfer_exactly(max_length),
+				boost::bind(&session::read_file, this,
+				filesize-max_length,
+				boost::asio::placeholders::error));
+		}
+		else
+		{
+			boost::asio::async_read(socket_,
+				boost::asio::buffer(data_in, filesize),
+				boost::asio::transfer_exactly(filesize),
+				boost::bind(&session::read_over, this,
+				filesize,
+				boost::asio::placeholders::error));
+		}
+	}
+
+	void send_file(string filename, unsigned long filesize)
+	{
+		file.open(filename, ios::in|ios::binary);
+		if (filesize > max_length)
+		{
+			file.read(data_out, max_length);
+			boost::asio::async_write(socket_,
+				boost::asio::buffer(data_out, max_length),
+				boost::asio::transfer_exactly(max_length),
+				boost::bind(&session::write_file, this,
+				filesize-max_length,
+				boost::asio::placeholders::error));
+		}
+		else
+		{
+			file.read(data_out, filesize);
+			boost::asio::async_write(socket_,
+				boost::asio::buffer(data_out, filesize),
+				boost::asio::transfer_exactly(filesize),
+				boost::bind(&session::write_over, this,
+				filesize,
+				boost::asio::placeholders::error));
+		}
+	}
 
 	void send_msg(MsgType mt, const char* szbuf)
 	{
@@ -149,7 +236,7 @@ private:
 		if (!error)
 		{
 			char* stopstring;
-			int bytes_to_transfer = strtol(data_in, &stopstring, 16);
+			unsigned long bytes_to_transfer = strtoul(data_in, &stopstring, 16);
 			read_content(bytes_to_transfer-3, error);
 		}
 		else
@@ -186,6 +273,82 @@ private:
 		}
 	}
 
+	void read_file(unsigned long bytes_to_transfer, const boost::system::error_code& error)
+	{
+		if (!error)
+		{
+			file.write(data_in, max_length);
+			if (bytes_to_transfer > max_length)
+			{
+				boost::asio::async_read(socket_,
+					boost::asio::buffer(data_in, max_length),
+					boost::asio::transfer_exactly(max_length),
+					boost::bind(&session::read_file, this,
+					bytes_to_transfer-max_length,
+					boost::asio::placeholders::error));
+			}
+			else
+			{
+				boost::asio::async_read(socket_,
+					boost::asio::buffer(data_in, bytes_to_transfer),
+					boost::asio::transfer_exactly(bytes_to_transfer),
+					boost::bind(&session::read_over, this,
+					bytes_to_transfer,
+					boost::asio::placeholders::error));
+			}
+		}
+		else
+		{
+			delete this;
+		}
+	}
+
+	void write_file(unsigned long bytes_to_transfer, const boost::system::error_code& error)
+	{
+		if (!error)
+		{
+			if (bytes_to_transfer > max_length)
+			{
+				file.read(data_out, max_length);
+				boost::asio::async_write(socket_,
+					boost::asio::buffer(data_out, max_length),
+					boost::asio::transfer_exactly(max_length),
+					boost::bind(&session::write_file, this,
+					bytes_to_transfer-max_length,
+					boost::asio::placeholders::error));
+			}
+			else
+			{
+				file.read(data_out, bytes_to_transfer);
+				boost::asio::async_write(socket_,
+					boost::asio::buffer(data_out, bytes_to_transfer),
+					boost::asio::transfer_exactly(bytes_to_transfer),
+					boost::bind(&session::write_over, this,
+					bytes_to_transfer,
+					boost::asio::placeholders::error));
+			}
+		}
+		else
+		{
+			delete this;
+		}
+	}
+
+	void read_over(unsigned long last_length, const boost::system::error_code& error)
+	{
+		file.write(data_in, last_length);
+		file.close();
+		owner_->AddLog("接收完毕");
+		delete this;
+	}
+
+	void write_over(unsigned long last_length, const boost::system::error_code& error)
+	{
+		file.close();
+		owner_->AddLog("发送完毕");
+		delete this;
+	}
+
 	void handle_read(const boost::system::error_code& error)
 	{
 		if (!error)
@@ -206,9 +369,10 @@ private:
 
 private:
 	tcp::socket socket_;
-	enum { max_length = 1024 };
+	enum {max_length = 1024};
 	char data_out[1024];
 	char data_in[1024];
 	CNode* owner_;
+	fstream file;
 };
 

@@ -19,7 +19,7 @@ MsgType MyMsgProtco::GetMsgType(const char *szMsg)
 	char* p = new char[3];
 	memset(p, 0, 3);
 	memcpy(p, szMsg, 2);
-	int temp = strtol(p, &endptr, 16);
+	unsigned long temp = strtoul(p, &endptr, 16);
 
 	if (temp < MT_ERROR)
 	{
