@@ -79,14 +79,14 @@ struct addr_struct
 
 struct file_struct
 {
-	file_struct(string filename, unsigned long filesize)
+	file_struct(string filename, unsigned __int64 filesize)
 		: filename_(filename)
 		, filesize_(filesize)
 	{
 
 	}
 	string filename_;
-	unsigned long filesize_;
+	unsigned __int64 filesize_;
 };
 
 class CNode : public boost::enable_shared_from_this<CNode>
@@ -197,7 +197,7 @@ public:
 			boost::bind(&session::handle_header, this, boost::asio::placeholders::error));
 	}
 
-	void recv_file(string filename, unsigned long filesize)
+	void recv_file(string filename, unsigned __int64 filesize)
 	{
 		filename = filename.substr(1, filename.size()-1);
 		file.open(filename, ios::out|ios::binary);
@@ -213,15 +213,15 @@ public:
 		else
 		{
 			boost::asio::async_read(socket_,
-				boost::asio::buffer(data_in, filesize),
-				boost::asio::transfer_exactly(filesize),
+				boost::asio::buffer(data_in, static_cast<size_t>(filesize)),
+				boost::asio::transfer_exactly(static_cast<size_t>(filesize)),
 				boost::bind(&session::read_over, this,
 				filesize,
 				boost::asio::placeholders::error));
 		}
 	}
 
-	void send_file(string filename, unsigned long filesize)
+	void send_file(string filename, unsigned __int64 filesize)
 	{
 		file.open(filename, ios::in|ios::binary);
 		if (filesize > max_length)
@@ -238,8 +238,8 @@ public:
 		{
 			file.read(data_out, filesize);
 			boost::asio::async_write(socket_,
-				boost::asio::buffer(data_out, filesize),
-				boost::asio::transfer_exactly(filesize),
+				boost::asio::buffer(data_out, static_cast<size_t>(filesize)),
+				boost::asio::transfer_exactly(static_cast<size_t>(filesize)),
 				boost::bind(&session::write_over, this,
 				filesize,
 				boost::asio::placeholders::error));
@@ -283,7 +283,7 @@ private:
 		if (!error)
 		{
 			char* stopstring;
-			unsigned long bytes_to_transfer = strtoul(data_in, &stopstring, 16);
+			unsigned __int64 bytes_to_transfer = _strtoui64(data_in, &stopstring, 16);
 			read_content(bytes_to_transfer-3, error);
 		}
 		else
@@ -292,7 +292,7 @@ private:
 		}
 	}
 
-	void read_content(size_t bytes_to_transfer, const boost::system::error_code& error)
+	void read_content(unsigned __int64 bytes_to_transfer, const boost::system::error_code& error)
 	{
 		if (!error)
 		{
@@ -308,8 +308,8 @@ private:
 			else
 			{
 				boost::asio::async_read(socket_,
-					boost::asio::buffer(data_in, bytes_to_transfer),
-					boost::asio::transfer_exactly(bytes_to_transfer),
+					boost::asio::buffer(data_in, static_cast<size_t>(bytes_to_transfer)),
+					boost::asio::transfer_exactly(static_cast<size_t>(bytes_to_transfer)),
 					boost::bind(&session::handle_read, this,
 					boost::asio::placeholders::error));
 			}
@@ -320,7 +320,7 @@ private:
 		}
 	}
 
-	void read_file(unsigned long bytes_to_transfer, const boost::system::error_code& error)
+	void read_file(unsigned __int64 bytes_to_transfer, const boost::system::error_code& error)
 	{
 		if (!error)
 		{
@@ -337,8 +337,8 @@ private:
 			else
 			{
 				boost::asio::async_read(socket_,
-					boost::asio::buffer(data_in, bytes_to_transfer),
-					boost::asio::transfer_exactly(bytes_to_transfer),
+					boost::asio::buffer(data_in, static_cast<size_t>(bytes_to_transfer)),
+					boost::asio::transfer_exactly(static_cast<size_t>(bytes_to_transfer)),
 					boost::bind(&session::read_over, this,
 					bytes_to_transfer,
 					boost::asio::placeholders::error));
@@ -346,11 +346,12 @@ private:
 		}
 		else
 		{
+			owner_->AddLog(error.message());
 			delete this;
 		}
 	}
 
-	void write_file(unsigned long bytes_to_transfer, const boost::system::error_code& error)
+	void write_file(unsigned __int64 bytes_to_transfer, const boost::system::error_code& error)
 	{
 		if (!error)
 		{
@@ -368,8 +369,8 @@ private:
 			{
 				file.read(data_out, bytes_to_transfer);
 				boost::asio::async_write(socket_,
-					boost::asio::buffer(data_out, bytes_to_transfer),
-					boost::asio::transfer_exactly(bytes_to_transfer),
+					boost::asio::buffer(data_out, static_cast<size_t>(bytes_to_transfer)),
+					boost::asio::transfer_exactly(static_cast<size_t>(bytes_to_transfer)),
 					boost::bind(&session::write_over, this,
 					bytes_to_transfer,
 					boost::asio::placeholders::error));
@@ -377,11 +378,12 @@ private:
 		}
 		else
 		{
+			owner_->AddLog(error.message());
 			delete this;
 		}
 	}
 
-	void read_over(unsigned long last_length, const boost::system::error_code& error)
+	void read_over(unsigned __int64 last_length, const boost::system::error_code& error)
 	{
 		if (!error)
 		{
@@ -396,7 +398,7 @@ private:
 		delete this;
 	}
 
-	void write_over(unsigned long last_length, const boost::system::error_code& error)
+	void write_over(unsigned __int64 last_length, const boost::system::error_code& error)
 	{
 		if (!error)
 		{
@@ -430,9 +432,9 @@ private:
 
 private:
 	tcp::socket socket_;
-	enum {max_length = 1024};
-	char data_out[1024];
-	char data_in[1024];
+	enum {max_length = 2048};
+	char data_out[2048];
+	char data_in[2048];
 	CNode* owner_;
 	fstream file;
 };

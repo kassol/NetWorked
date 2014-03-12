@@ -77,9 +77,10 @@ void CNode::AddNodes()
 }
 
 void CNode::ParseProj()
-{
-	task_struct task("D:\\data\\ads\\1\\J_L112040403PANB14A_0_0.tif", 0);
-	task_list.push_back(task);
+{	
+// 	task_list.push_back(task_struct("D:\\data\\ads\\1\\J_L112040403PANB14A_0_0.tif", 0));
+// 	task_list.push_back(task_struct("D:\\data\\ads\\1\\J_L112040403PANB14A_0_1.tif", 0));
+	task_list.push_back(task_struct("C:\\outImg.tiff", 0));
 }
 
 void CNode::Distribute()
@@ -95,7 +96,8 @@ void CNode::Distribute()
 	for_each(task_list.begin(), task_list.end(), [&](task_struct& task)
 	{
 		char filesize[50] = "";
-		_snprintf_s(filesize, 50, 50, "%016X", boost::filesystem::file_size(task.task_));
+		unsigned __int64 nfilesize = boost::filesystem::file_size(task.task_);
+		_snprintf_s(filesize, 50, 50, "%I64x", nfilesize);
 		string filename = task.task_.substr(task.task_.rfind('\\')+1, task.task_.size()-task.task_.rfind('\\')-1);
 		strmsg = filesize+string("|");
 		strmsg += filename;
@@ -328,7 +330,7 @@ void CNode::send_metafile(session* new_session, addr_struct* addr, const boost::
 			return;
 		}
 		AddLog("找到任务，开始发送文件");
-		new_session->send_file(task_path, (unsigned long)boost::filesystem::file_size(task_path));
+		new_session->send_file(task_path, boost::filesystem::file_size(task_path));
 		delete addr;
 	}
 	else
@@ -459,7 +461,7 @@ void CNode::handle_msg(string ip, const char* msg)
 	case MT_METAFILE:
 		{
 			char* pathname;
-			unsigned long filesize = strtoul(szresult, &pathname, 16);
+			unsigned __int64 filesize = _strtoui64(szresult, &pathname, 16);
 			AddLog("接收文件"+string(pathname).substr(1, string(pathname).size()-1));
 			unsigned short file_port = 8999;
 			AddLog("开始绑定端口");
