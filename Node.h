@@ -45,6 +45,50 @@ struct node_struct
 	}
 };
 
+struct msg_struct
+{
+	msg_struct(MsgType mt, string msg, string ip)
+		: mt_(mt)
+		, msg_(msg)
+		, ip_(ip)
+	{
+
+	}
+	msg_struct(MsgType mt, string msg)
+		: mt_(mt)
+		, msg_(msg)
+	{
+		ip_ = "";
+	}
+	MsgType mt_;
+	string msg_;
+	string ip_;
+};
+
+struct addr_struct
+{
+	addr_struct(string ip, unsigned short port)
+		: ip_(ip)
+		, port_(port)
+	{
+
+	}
+	string ip_;
+	unsigned short port_;
+};
+
+struct file_struct
+{
+	file_struct(string filename, unsigned long filesize)
+		: filename_(filename)
+		, filesize_(filesize)
+	{
+
+	}
+	string filename_;
+	unsigned long filesize_;
+};
+
 class CNode : public boost::enable_shared_from_this<CNode>
 	, boost::noncopyable
 {
@@ -64,6 +108,7 @@ public:
 		, is_scan_finished(true)
 		, is_ping_busy(false)
 		, is_busy(false)
+		, file_acceptor_(io_service)
 	{
 		is_connected = Initialize();
 		if (is_connected)
@@ -90,11 +135,11 @@ private:
 	void start_scan();
 	void start_ping();
 	void handle_accept(session* new_session, const boost::system::error_code& error);
-	void handle_accept_file(session* new_session, string filename, long filesize, const boost::system::error_code& error);
+	void handle_accept_file(session* new_session, file_struct* file, const boost::system::error_code& error);
 	void handle_connect(session* new_session, const boost::system::error_code& error);
-	void handle_connect_msg(session* new_session, string ip, MsgType mt, const char* szbuf, const boost::system::error_code& error);
+	void handle_connect_msg(session* new_session, msg_struct* msg, const boost::system::error_code& error);
 	void handle_msg(string ip, const char* msg);
-	void send_metafile(session* new_session, string ip, unsigned short file_port, const boost::system::error_code& error);
+	void send_metafile(session* new_session, addr_struct* addr, const boost::system::error_code& error);
 
 public:
 	bool IsConnected();
@@ -121,6 +166,7 @@ private:
 	bool is_busy;
 	boost::asio::io_service& io_service_;
 	tcp::acceptor acceptor_;
+	tcp::acceptor file_acceptor_;
 	std::vector<string> ip_list;
 	std::vector<node_struct> available_list;
 	std::deque<string> log_list;
@@ -153,6 +199,7 @@ public:
 
 	void recv_file(string filename, unsigned long filesize)
 	{
+		filename = filename.substr(1, filename.size()-1);
 		file.open(filename, ios::out|ios::binary);
 		if (filesize > max_length)
 		{
@@ -336,16 +383,30 @@ private:
 
 	void read_over(unsigned long last_length, const boost::system::error_code& error)
 	{
+		if (!error)
+		{
+			owner_->AddLog("接收完毕");
+		}
+		else
+		{
+			owner_->AddLog(error.message());
+		}
 		file.write(data_in, last_length);
 		file.close();
-		owner_->AddLog("接收完毕");
 		delete this;
 	}
 
 	void write_over(unsigned long last_length, const boost::system::error_code& error)
 	{
+		if (!error)
+		{
+			owner_->AddLog("发送完毕");
+		}
+		else
+		{
+			owner_->AddLog(error.message());
+		}
 		file.close();
-		owner_->AddLog("发送完毕");
 		delete this;
 	}
 
