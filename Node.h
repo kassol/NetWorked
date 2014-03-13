@@ -139,6 +139,7 @@ private:
 	void handle_connect(session* new_session, const boost::system::error_code& error);
 	void handle_connect_msg(session* new_session, msg_struct* msg, const boost::system::error_code& error);
 	void handle_msg(string ip, const char* msg);
+	void handle_result(MsgType mt, string ip, bool is_sender = false);
 	void send_metafile(session* new_session, addr_struct* addr, const boost::system::error_code& error);
 
 public:
@@ -171,7 +172,7 @@ private:
 	std::vector<node_struct> available_list;
 	std::deque<string> log_list;
 	std::vector<task_struct> task_list;
-	ofstream outfile;
+	fstream outfile;
 };
 
 
@@ -347,6 +348,12 @@ private:
 		else
 		{
 			owner_->AddLog(error.message());
+			boost::system::error_code ec;
+			boost::asio::ip::tcp::endpoint endpoint = socket_.remote_endpoint(ec);
+			if (!ec)
+			{
+				owner_->handle_result(MT_METAFILE_FAIL, endpoint.address().to_string());
+			}
 			delete this;
 		}
 	}
@@ -379,19 +386,36 @@ private:
 		else
 		{
 			owner_->AddLog(error.message());
+			file.close();
+			boost::system::error_code ec;
+			boost::asio::ip::tcp::endpoint endpoint = socket_.remote_endpoint(ec);
+			if (!ec)
+			{
+				owner_->handle_result(MT_METAFILE_FAIL, endpoint.address().to_string(), true);
+			}
 			delete this;
 		}
 	}
 
 	void read_over(unsigned __int64 last_length, const boost::system::error_code& error)
 	{
+		boost::system::error_code ec;
+		boost::asio::ip::tcp::endpoint endpoint = socket_.remote_endpoint(ec);
 		if (!error)
 		{
 			owner_->AddLog("½ÓÊÕÍê±Ï");
+			if (!ec)
+			{
+				owner_->handle_result(MT_METAFILE_FINISH, endpoint.address().to_string());
+			}
 		}
 		else
 		{
 			owner_->AddLog(error.message());
+			if (!ec)
+			{
+				owner_->handle_result(MT_METAFILE_FAIL, endpoint.address().to_string());
+			}
 		}
 		file.write(data_in, last_length);
 		file.close();
@@ -407,6 +431,12 @@ private:
 		else
 		{
 			owner_->AddLog(error.message());
+			boost::system::error_code ec;
+			boost::asio::ip::tcp::endpoint endpoint = socket_.remote_endpoint(ec);
+			if (!ec)
+			{
+				owner_->handle_result(MT_METAFILE_FAIL, endpoint.address().to_string(), true);
+			}
 		}
 		file.close();
 		delete this;

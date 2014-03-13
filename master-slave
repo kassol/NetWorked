@@ -9,3 +9,9 @@ slave-master:
 2.MT_METAFILE_READY(PORT)/MT_METAFILE_FAIL(MSG)
 3.MT_FILE_READY(PORT)/MT_FILE_FAIL(MSG)
 4.MT_FILE(FILE_NAME, SIZE)
+
+task-state:
+0:未分配
+1:已分配
+2:已发送
+3:已完成

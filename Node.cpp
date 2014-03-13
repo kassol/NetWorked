@@ -78,9 +78,9 @@ void CNode::AddNodes()
 
 void CNode::ParseProj()
 {	
-// 	task_list.push_back(task_struct("D:\\data\\ads\\1\\J_L112040403PANB14A_0_0.tif", 0));
-// 	task_list.push_back(task_struct("D:\\data\\ads\\1\\J_L112040403PANB14A_0_1.tif", 0));
-	task_list.push_back(task_struct("C:\\outImg.tiff", 0));
+ 	task_list.push_back(task_struct("D:\\data\\新建文件夹 (2)\\02-164_50mic.tif", 0));
+	task_list.push_back(task_struct("D:\\data\\新建文件夹 (2)\\02-165_50mic.tif", 0));
+//	task_list.push_back(task_struct("C:\\outImg.tiff", 0));
 }
 
 void CNode::Distribute()
@@ -108,14 +108,19 @@ void CNode::Distribute()
 				new_session = new session(io_service_, this);
 				task.state_ = 1;
 				task.ip_ = available_list.at(i).ip_;
+				available_list.at(i).is_busy = true;
 				new_session->socket().async_connect(
 					tcp::endpoint(boost::asio::ip::address::from_string(available_list.at(i).ip_), listen_port),
 					boost::bind(&CNode::handle_connect_msg, this, new_session, 
-					new msg_struct(MT_METAFILE,strmsg, available_list.at(i).ip_), boost::asio::placeholders::error));
+					new msg_struct(MT_METAFILE, strmsg), boost::asio::placeholders::error));
 				i = (i+1)%available_list.size();
 				break;
 			}
 			i = (i+1)%available_list.size();
+			if (i == 0)
+			{
+				Sleep(1000);
+			}
 		}
 	});
 }
@@ -205,10 +210,10 @@ void CNode::Start()
 
 	Sleep(2000);
 
-// 	if (!is_ping_busy)
-// 	{
-// 		boost::thread thrd(boost::bind(&CNode::start_ping, this));
-// 	}
+	if (!is_ping_busy)
+	{
+		boost::thread thrd(boost::bind(&CNode::start_ping, this));
+	}
 
 	Sleep(2000);
 	
@@ -273,7 +278,7 @@ void CNode::start_ping()
 				new_session->socket().async_connect(tcp::endpoint(boost::asio::ip::address::from_string(node.ip_), listen_port),
 					boost::bind(&CNode::handle_connect_msg, this, new_session, new msg_struct(MT_PING, "", node.ip_), boost::asio::placeholders::error));
 			});
-			Sleep(5000);
+			Sleep(500);
 		}
 	}
 }
@@ -316,7 +321,7 @@ void CNode::send_metafile(session* new_session, addr_struct* addr, const boost::
 		string task_path;
 		for (size_t i = 0; i < task_list.size(); ++i)
 		{
-			if (task_list.at(i).ip_ == addr->ip_)
+			if (task_list.at(i).ip_ == addr->ip_ && task_list.at(i).state_ == 1)
 			{
 				task_path = task_list.at(i).task_;
 				break;
@@ -497,8 +502,44 @@ void CNode::handle_msg(string ip, const char* msg)
 				boost::bind(&CNode::send_metafile, this, new_session, new addr_struct(ip, file_port), boost::asio::placeholders::error));
 			break;
 		}
+	case MT_METAFILE_FINISH:
+		{
+			std::vector<task_struct>::iterator ite = task_list.begin();
+			while(ite != task_list.end())
+			{
+				if (ite->ip_ == ip && ite->state_ == 1)
+				{
+					string strmsg = ite->task_;
+					AddLog(strmsg+"发送成功");
+					ite->state_ = 2;
+					break;
+				}
+				++ite;
+			}
+			break;
+		}
 	case MT_METAFILE_FAIL:
 		{
+			string strmsg = ip;
+			AddLog("发送"+ip+"的文件失败");
+			std::vector<task_struct>::iterator ite = task_list.begin();
+			while(ite != task_list.end())
+			{
+				if (ite->ip_ == ip && ite->state_ == 1)
+				{
+					char filesize[50];
+					unsigned __int64 nfilesize = boost::filesystem::file_size(ite->task_);
+					_snprintf_s(filesize, 50, 50, "%I64x", nfilesize);
+					string filename = ite->task_.substr(ite->task_.rfind('\\')+1, ite->task_.size()-ite->task_.rfind('\\')-1);
+					string strmsg = filesize+string("|");
+					strmsg += filename;
+					new_session = new session(io_service_, this);
+					new_session->socket().async_connect(tcp::endpoint(boost::asio::ip::address::from_string(ip), listen_port),
+						boost::bind(&CNode::handle_connect_msg, this, new_session, 
+						new msg_struct(MT_METAFILE, strmsg), boost::asio::placeholders::error));
+					break;
+				}
+			}
 			break;
 		}
 	case MT_FILE:
@@ -534,11 +575,12 @@ void CNode::handle_msg(string ip, const char* msg)
 			ite = std::find(available_list.begin(), available_list.end(), node_struct(ip));
 			if (ite != available_list.end())
 			{
-				if (szresult == "-1")
+				string result(szresult);
+				if (result == "-1")
 				{
 					ite->is_busy = true;
 				}
-				else if (szresult == "1")
+				else if (result == "1")
 				{
 					ite->is_busy = false;
 				}
@@ -550,4 +592,45 @@ void CNode::handle_msg(string ip, const char* msg)
 	}
 	delete []szresult;
 	szresult = NULL;
+}
+
+void CNode::handle_result(MsgType mt, string ip, bool is_sender)
+{
+	session* new_session = NULL;
+	if (is_sender)
+	{
+		if (mt == MT_METAFILE_FAIL)
+		{
+			std::vector<task_struct>::iterator ite = task_list.begin();
+			while(ite != task_list.end())
+			{
+				if (ite->ip_ == ip && ite->state_ == 1)
+				{
+					char filesize[50];
+					unsigned __int64 nfilesize = boost::filesystem::file_size(ite->task_);
+					_snprintf_s(filesize, 50, 50, "%I64x", nfilesize);
+					string filename = ite->task_.substr(ite->task_.rfind('\\')+1, ite->task_.size()-ite->task_.rfind('\\')-1);
+					string strmsg = filesize+string("|");
+					strmsg += filename;
+					new_session = new session(io_service_, this);
+					new_session->socket().async_connect(tcp::endpoint(boost::asio::ip::address::from_string(ip), listen_port),
+						boost::bind(&CNode::handle_connect_msg, this, new_session, 
+						new msg_struct(MT_METAFILE, strmsg), boost::asio::placeholders::error));
+					break;
+				}
+			}
+		}
+		else if (mt == MT_FILE_FAIL)
+		{
+		}
+	}
+	else
+	{
+		is_busy = false;
+		AddLog("停止监听");
+		file_acceptor_.close();
+		new_session = new session(io_service_, this);
+		new_session->socket().async_connect(tcp::endpoint(boost::asio::ip::address::from_string(ip), listen_port),
+			boost::bind(&CNode::handle_connect_msg, this, new_session, new msg_struct(mt, "", ip), boost::asio::placeholders::error));
+	}
 }
