@@ -130,6 +130,8 @@ private:
 	void AddNodes();
 	void ParseProj();
 	void Distribute();
+	void ParseMetaFile();
+	void RequestFiles();
 	void Work();
 
 private:
@@ -143,6 +145,7 @@ private:
 	void handle_msg(string ip, const char* msg);
 	void handle_result(MsgType mt, string ip, bool is_sender = false);
 	void send_metafile(session* new_session, addr_struct* addr, const boost::system::error_code& error);
+	void send_file(session* new_session, file_struct* file, const boost::system::error_code& error);
 
 public:
 	bool IsConnected();
@@ -177,6 +180,8 @@ private:
 	fstream outfile;
 	unsigned int limit_filenum_to_transfer;
 	unsigned int cur_filenum;
+	string metafile_name;
+	std::vector<task_struct> request_list;
 };
 
 

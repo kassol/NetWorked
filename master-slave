@@ -15,3 +15,5 @@ task-state:
 1:已分配
 2:已发送
 3:已完成
+
+MetaFile->FileList->MT_FILE_REQUEST(FILE_NAME)->MT_FILE(FILE_NAME, SIZE)->MT_FILE_READY(PORT, FILE_NAME)
