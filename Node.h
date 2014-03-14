@@ -109,6 +109,8 @@ public:
 		, is_ping_busy(false)
 		, is_busy(false)
 		, file_acceptor_(io_service)
+		, limit_filenum_to_transfer(2)
+		, cur_filenum(0)
 	{
 		is_connected = Initialize();
 		if (is_connected)
@@ -173,6 +175,8 @@ private:
 	std::deque<string> log_list;
 	std::vector<task_struct> task_list;
 	fstream outfile;
+	unsigned int limit_filenum_to_transfer;
+	unsigned int cur_filenum;
 };
 
 

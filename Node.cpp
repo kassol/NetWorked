@@ -80,7 +80,7 @@ void CNode::ParseProj()
 {	
  	task_list.push_back(task_struct("D:\\data\\新建文件夹 (2)\\02-164_50mic.tif", 0));
 	task_list.push_back(task_struct("D:\\data\\新建文件夹 (2)\\02-165_50mic.tif", 0));
-//	task_list.push_back(task_struct("C:\\outImg.tiff", 0));
+	task_list.push_back(task_struct("C:\\outImg.tiff", 0));
 }
 
 void CNode::Distribute()
@@ -101,6 +101,11 @@ void CNode::Distribute()
 		string filename = task.task_.substr(task.task_.rfind('\\')+1, task.task_.size()-task.task_.rfind('\\')-1);
 		strmsg = filesize+string("|");
 		strmsg += filename;
+		if (available_list.empty())
+		{
+			AddLog("无可用节点,结束分配任务");
+			return;
+		}
 		while (i < available_list.size())
 		{
 			if (!available_list.at(i).is_busy)
@@ -113,6 +118,7 @@ void CNode::Distribute()
 					tcp::endpoint(boost::asio::ip::address::from_string(available_list.at(i).ip_), listen_port),
 					boost::bind(&CNode::handle_connect_msg, this, new_session, 
 					new msg_struct(MT_METAFILE, strmsg), boost::asio::placeholders::error));
+				++cur_filenum;
 				i = (i+1)%available_list.size();
 				break;
 			}
@@ -122,7 +128,13 @@ void CNode::Distribute()
 				Sleep(1000);
 			}
 		}
+		while(cur_filenum >= limit_filenum_to_transfer)
+		{
+			Sleep(1000);
+		}
 	});
+
+	AddLog("任务分配完成");
 }
 
 void CNode::Work()
@@ -227,7 +239,6 @@ void CNode::Start()
 
 	Distribute();
 
-	AddLog("任务分配完成");
 }
 
 void CNode::start_accept()
@@ -334,7 +345,7 @@ void CNode::send_metafile(session* new_session, addr_struct* addr, const boost::
 			delete addr;
 			return;
 		}
-		AddLog("找到任务，开始发送文件");
+		AddLog("找到文件，开始发送文件");
 		new_session->send_file(task_path, boost::filesystem::file_size(task_path));
 		delete addr;
 	}
@@ -473,6 +484,7 @@ void CNode::handle_msg(string ip, const char* msg)
 			boost::system::error_code er;
 			boost::asio::ip::tcp::endpoint endpoint(boost::asio::ip::tcp::v4(), file_port);
 			file_acceptor_.open(endpoint.protocol());
+			is_busy = true;
 			file_acceptor_.bind(endpoint, er);
 			file_acceptor_.listen();
 			if (er)
@@ -504,6 +516,7 @@ void CNode::handle_msg(string ip, const char* msg)
 		}
 	case MT_METAFILE_FINISH:
 		{
+			--cur_filenum;
 			std::vector<task_struct>::iterator ite = task_list.begin();
 			while(ite != task_list.end())
 			{
@@ -626,9 +639,9 @@ void CNode::handle_result(MsgType mt, string ip, bool is_sender)
 	}
 	else
 	{
-		is_busy = false;
 		AddLog("停止监听");
 		file_acceptor_.close();
+		is_busy = false;
 		new_session = new session(io_service_, this);
 		new_session->socket().async_connect(tcp::endpoint(boost::asio::ip::address::from_string(ip), listen_port),
 			boost::bind(&CNode::handle_connect_msg, this, new_session, new msg_struct(mt, "", ip), boost::asio::placeholders::error));
