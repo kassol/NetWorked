@@ -77,6 +77,13 @@ struct addr_struct
 	unsigned short port_;
 };
 
+enum SessionType
+{
+	ST_NORMAL,
+	ST_METAFILE,
+	ST_FILE
+};
+
 struct file_struct
 {
 	file_struct(string filename, unsigned __int64 filesize)
@@ -111,6 +118,7 @@ public:
 		, file_acceptor_(io_service)
 		, limit_filenum_to_transfer(2)
 		, cur_filenum(0)
+		, is_requesting(false)
 	{
 		is_connected = Initialize();
 		if (is_connected)
@@ -170,6 +178,7 @@ private:
 	bool is_scan_finished;
 	bool is_ping_busy;
 	bool is_busy;
+	bool is_requesting;
 	boost::asio::io_service& io_service_;
 	tcp::acceptor acceptor_;
 	tcp::acceptor file_acceptor_;
@@ -188,9 +197,10 @@ private:
 class session
 {
 public:
-	session(boost::asio::io_service& io_service, CNode* owner)
+	session(boost::asio::io_service& io_service, CNode* owner, SessionType st = ST_NORMAL)
 		: socket_(io_service)
 		, owner_(owner)
+		, st_(st)
 	{
 	}
 
@@ -415,7 +425,14 @@ private:
 			owner_->AddLog("½ÓÊÕÍê±Ï");
 			if (!ec)
 			{
-				owner_->handle_result(MT_METAFILE_FINISH, endpoint.address().to_string());
+				if (st_ == ST_METAFILE)
+				{
+					owner_->handle_result(MT_METAFILE_FINISH, endpoint.address().to_string());
+				}
+				else if (st_ == ST_FILE)
+				{
+					owner_->handle_result(MT_FILE_FINISH, endpoint.address().to_string());
+				}
 			}
 		}
 		else
@@ -423,7 +440,14 @@ private:
 			owner_->AddLog(error.message());
 			if (!ec)
 			{
-				owner_->handle_result(MT_METAFILE_FAIL, endpoint.address().to_string());
+				if (st_ == ST_METAFILE)
+				{
+					owner_->handle_result(MT_METAFILE_FAIL, endpoint.address().to_string());
+				}
+				else if (st_ == ST_FILE)
+				{
+					owner_->handle_result(MT_FILE_FAIL, endpoint.address().to_string());
+				}
 			}
 		}
 		file.write(data_in, last_length);
@@ -444,7 +468,14 @@ private:
 			boost::asio::ip::tcp::endpoint endpoint = socket_.remote_endpoint(ec);
 			if (!ec)
 			{
-				owner_->handle_result(MT_METAFILE_FAIL, endpoint.address().to_string(), true);
+				if (st_ == ST_METAFILE)
+				{
+					owner_->handle_result(MT_METAFILE_FAIL, endpoint.address().to_string(), true);
+				}
+				else if (st_ == ST_FILE)
+				{
+					owner_->handle_result(MT_FILE_FAIL, endpoint.address().to_string(), true);
+				}
 			}
 		}
 		file.close();
@@ -474,6 +505,7 @@ private:
 	enum {max_length = 2048};
 	char data_out[2048];
 	char data_in[2048];
+	SessionType st_;
 	CNode* owner_;
 	fstream file;
 };

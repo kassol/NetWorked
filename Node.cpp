@@ -147,18 +147,35 @@ void CNode::ParseMetaFile()
 void CNode::RequestFiles()
 {
 	session* new_session = NULL;
-	for_each(request_list.begin(), request_list.end(), [&](task_struct& request)
+	std::vector<task_struct>::iterator iteTask = request_list.begin();
+	while(iteTask != request_list.end())
 	{
-		while (is_busy)
+		while(is_requesting)
 		{
 			Sleep(1000);
 		}
-		is_busy = true;
+		if (iteTask->state_ == 2)
+		{
+			++iteTask;
+			if (iteTask == request_list.end())
+			{
+				break;
+			}
+		}
+		
+
+		is_requesting = true;
+
+		if (iteTask->state_ == 0)
+		{
+			iteTask->state_ = 1;
+		}
+
 		new_session = new session(io_service_, this);
 		new_session->socket().async_connect(tcp::endpoint(boost::asio::ip::address::from_string(master_ip), listen_port),
-			boost::bind(&CNode::handle_connect_msg, this, new_session, 
-			new msg_struct(MT_FILE_REQUEST, request.task_), boost::asio::placeholders::error));
-	});
+			boost::bind(&CNode::handle_connect_msg, this, new_session,
+			new msg_struct(MT_FILE_REQUEST, iteTask->task_), boost::asio::placeholders::error));
+	}
 }
 
 void CNode::Work()
@@ -378,7 +395,7 @@ void CNode::send_metafile(session* new_session, addr_struct* addr, const boost::
 		AddLog("连接失败");
 		AddLog(error.message());
 		delete new_session;
-		new_session = new session(io_service_, this);
+		new_session = new session(io_service_, this, ST_METAFILE);
 		new_session->socket().async_connect(tcp::endpoint(boost::asio::ip::address::from_string(addr->ip_), addr->port_),
 			boost::bind(&CNode::send_metafile, this, new_session, addr, boost::asio::placeholders::error));
 	}
@@ -549,7 +566,7 @@ void CNode::handle_msg(string ip, const char* msg)
 		{
 			char* rest;
 			unsigned short file_port = (unsigned short)strtoul(szresult, &rest, 16);
-			new_session = new session(io_service_, this);
+			new_session = new session(io_service_, this, ST_METAFILE);
 			new_session->socket().async_connect(tcp::endpoint(boost::asio::ip::address::from_string(ip), file_port),
 				boost::bind(&CNode::send_metafile, this, new_session, new addr_struct(ip, file_port), boost::asio::placeholders::error));
 			break;
@@ -613,7 +630,8 @@ void CNode::handle_msg(string ip, const char* msg)
 		{
 			char* pathname;
 			unsigned __int64 filesize = _strtoui64(szresult, &pathname, 16);
-			string filename = string(pathname).substr(1, string(pathname).size()-1);
+			string filepath = string(pathname).substr(1, string(pathname).size()-1);
+			string filename = filepath.substr(filepath.rfind("\\")+1, filepath.size()-filepath.rfind("\\")-1);
 			AddLog("接收文件"+ filename);
 			unsigned short file_port = 8999;
 			AddLog("开始绑定端口");
@@ -638,7 +656,7 @@ void CNode::handle_msg(string ip, const char* msg)
 			memset(pfileport, 0, 5);
 			_snprintf_s(pfileport, 5, 5, "%04X", file_port);
 			string strmsg = pfileport+string("|");
-			strmsg += filename;
+			strmsg += filepath;
 			new_session->socket().async_connect(tcp::endpoint(boost::asio::ip::address::from_string(ip), listen_port),
 				boost::bind(&CNode::handle_connect_msg, this, new_session, new msg_struct(MT_FILE_READY, strmsg), boost::asio::placeholders::error));
 			break;
@@ -649,7 +667,7 @@ void CNode::handle_msg(string ip, const char* msg)
 			char* rest;
 			unsigned short file_port = (unsigned short)strtoul(szresult, &rest, 16);
 			string filename = string (rest).substr(1, string(rest).size()-1);
-			new_session = new session(io_service_, this);
+			new_session = new session(io_service_, this, ST_FILE);
 			new_session->socket().async_connect(tcp::endpoint(boost::asio::ip::address::from_string(ip), file_port),
 				boost::bind(&CNode::send_file, this, new_session, new file_struct(filename, 0), boost::asio::placeholders::error));
 			break;
@@ -724,21 +742,31 @@ void CNode::handle_result(MsgType mt, string ip, bool is_sender)
 				}
 			}
 		}
-		else if (mt == MT_FILE_FAIL)
-		{
-		}
 	}
 	else
 	{
 		AddLog("停止监听");
 		file_acceptor_.close();
-		is_busy = false;
 		new_session = new session(io_service_, this);
 		new_session->socket().async_connect(tcp::endpoint(boost::asio::ip::address::from_string(ip), listen_port),
 			boost::bind(&CNode::handle_connect_msg, this, new_session, new msg_struct(mt, "", ip), boost::asio::placeholders::error));
 		if (mt == MT_METAFILE_FINISH)
 		{
 			ParseMetaFile();
+		}
+		if (mt == MT_FILE_FINISH)
+		{
+			std::vector<task_struct>::iterator ite = request_list.begin();
+			while(ite != request_list.end())
+			{
+				if (ite->state_ == 1)
+				{
+					ite->state_ = 2;
+					break;
+				}
+				++ite;
+			}
+			is_requesting = false;
 		}
 	}
 }
