@@ -15,6 +15,7 @@ using namespace boost::asio;
 using boost::asio::ip::tcp;
 
 
+
 struct task_struct 
 {
 	task_struct(string task, unsigned int state)
@@ -33,8 +34,9 @@ struct node_struct
 {
 	node_struct(string ip)
 		: ip_(ip)
+		, is_busy(false)
 	{
-		is_busy = false;
+
 	}
 	string ip_;
 	bool is_busy;
@@ -96,6 +98,9 @@ struct file_struct
 	unsigned __int64 filesize_;
 };
 
+
+
+
 class CNode : public boost::enable_shared_from_this<CNode>
 	, boost::noncopyable
 {
@@ -121,7 +126,7 @@ public:
 		, is_requesting(false)
 	{
 		is_connected = Initialize();
-		if (is_connected)
+		if (IsConnected())
 		{
 			start_accept();
 		}
