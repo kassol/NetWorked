@@ -83,7 +83,8 @@ enum SessionType
 {
 	ST_NORMAL,
 	ST_METAFILE,
-	ST_FILE
+	ST_FILE,
+	ST_FILE_BACK
 };
 
 struct file_struct
@@ -124,6 +125,7 @@ public:
 		, limit_filenum_to_transfer(2)
 		, cur_filenum(0)
 		, is_requesting(false)
+		, is_feedback(false)
 	{
 		is_connected = Initialize();
 		if (IsConnected())
@@ -184,6 +186,7 @@ private:
 	bool is_ping_busy;
 	bool is_busy;
 	bool is_requesting;
+	bool is_feedback;
 	boost::asio::io_service& io_service_;
 	tcp::acceptor acceptor_;
 	tcp::acceptor file_acceptor_;
@@ -196,6 +199,7 @@ private:
 	unsigned int cur_filenum;
 	string metafile_name;
 	std::vector<task_struct> request_list;
+	std::vector<task_struct> feedback_list;
 };
 
 
@@ -438,6 +442,10 @@ private:
 				{
 					owner_->handle_result(MT_FILE_FINISH, endpoint.address().to_string());
 				}
+				else if (st_ == ST_FILE_BACK)
+				{
+					owner_->handle_result(MT_FILE_BACK_FINISH, endpoint.address().to_string());
+				}
 			}
 		}
 		else
@@ -449,7 +457,7 @@ private:
 				{
 					owner_->handle_result(MT_METAFILE_FAIL, endpoint.address().to_string());
 				}
-				else if (st_ == ST_FILE)
+				else if (st_ == ST_FILE || st_ == ST_FILE_BACK)
 				{
 					owner_->handle_result(MT_FILE_FAIL, endpoint.address().to_string());
 				}
@@ -465,6 +473,10 @@ private:
 		if (!error)
 		{
 			owner_->AddLog("·¢ËÍÍê±Ï");
+			if (st_ == ST_FILE_BACK)
+			{
+				owner_->handle_result(MT_FILE_BACK_FINISH, "", true);
+			}
 		}
 		else
 		{
