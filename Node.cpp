@@ -344,7 +344,12 @@ void CNode::Start()
 
 	start_scan();
 
-	Sleep(2000);
+// 	while(!is_scan_finished)
+// 	{
+// 		Sleep(1000);
+// 	}
+// 
+// 	AddLog("扫描完成");
 
 	if (ip_list.empty())
 	{
@@ -400,7 +405,7 @@ void CNode::start_accept()
 {
 	session* new_session = new session(io_service_, this);
 	acceptor_.async_accept(new_session->socket(),
-		boost::bind(&CNode::handle_accept, this, new_session, 
+		boost::bind(&CNode::handle_accept, this, new_session,
 		boost::asio::placeholders::error));
 }
 
@@ -424,6 +429,7 @@ void CNode::start_scan()
 		int newnd = (nd+n)%255;
 		_itoa_s(newnd, tmp, 10, 10);
 		string str_ip = abc+tmp;
+
 		new_session->socket().async_connect(
 			tcp::endpoint(boost::asio::ip::address::from_string(str_ip), listen_port),
 			boost::bind(&CNode::handle_connect, this, new_session,
@@ -466,6 +472,7 @@ void CNode::handle_accept(session* new_session,
 	}
 	else
 	{
+		AddLog(error.message());
 		delete new_session;
 	}
 	start_accept();
@@ -556,12 +563,13 @@ void CNode::handle_connect(session* new_session,
 			new_session->socket().remote_endpoint(ec);
 		if (ec)
 		{
+			AddLog(ec.message());
 			delete new_session;
 		}
 		else
 		{
 			string ip = endpoint.address().to_string();
-
+			AddLog("连接成功"+ip);
 			std::vector<string>::iterator ite =
 				std::find(ip_list.begin(), ip_list.end(), ip);
 
@@ -573,6 +581,7 @@ void CNode::handle_connect(session* new_session,
 	}
 	else
 	{
+		//AddLog(error.message());
 		delete new_session;
 	}
 	if (scan_count == 0)
@@ -603,6 +612,7 @@ void CNode::handle_connect_msg(session* new_session, msg_struct* msg,
 				AddLog("丢失到"+msg->ip_+"的连接");
 			}
 		}
+		AddLog(error.message());
 		delete new_session;
 		delete msg;
 	}
