@@ -431,6 +431,8 @@ private:
 		boost::asio::ip::tcp::endpoint endpoint = socket_.remote_endpoint(ec);
 		if (!error)
 		{
+			file.write(data_in, last_length);
+			file.close();
 			owner_->AddLog("接收完毕");
 			if (!ec)
 			{
@@ -450,6 +452,8 @@ private:
 		}
 		else
 		{
+			file.write(data_in, last_length);
+			file.close();
 			owner_->AddLog(error.message());
 			if (!ec)
 			{
@@ -463,8 +467,6 @@ private:
 				}
 			}
 		}
-		file.write(data_in, last_length);
-		file.close();
 		delete this;
 	}
 
@@ -472,6 +474,7 @@ private:
 	{
 		if (!error)
 		{
+			file.close();
 			owner_->AddLog("发送完毕");
 			if (st_ == ST_FILE_BACK)
 			{
@@ -480,6 +483,7 @@ private:
 		}
 		else
 		{
+			file.close();
 			owner_->AddLog(error.message());
 			boost::system::error_code ec;
 			boost::asio::ip::tcp::endpoint endpoint = socket_.remote_endpoint(ec);
@@ -495,7 +499,6 @@ private:
 				}
 			}
 		}
-		file.close();
 		delete this;
 	}
 
