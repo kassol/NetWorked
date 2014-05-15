@@ -351,6 +351,16 @@ void CNode::Start()
 // 
 // 	AddLog("扫描完成");
 
+	while(ip_list.empty())
+	{
+		Sleep(1000);
+		AddLog("扫描中，请稍候...");
+		if (is_scan_finished)
+		{
+			break;
+		}
+	}
+
 	if (ip_list.empty())
 	{
 		if (is_scan_finished)
@@ -391,13 +401,13 @@ void CNode::Start()
 	
 	AddLog("解析任务中，请稍候...");
 
-	ParseProj();
-
-	Sleep(2000);
-
-	AddLog("分配任务中，请稍候...");
-
-	Distribute();
+// 	ParseProj();
+// 
+// 	Sleep(2000);
+// 
+// 	AddLog("分配任务中，请稍候...");
+// 
+// 	Distribute();
 
 }
 
@@ -407,6 +417,7 @@ void CNode::start_accept()
 	acceptor_.async_accept(new_session->socket(),
 		boost::bind(&CNode::handle_accept, this, new_session,
 		boost::asio::placeholders::error));
+	AddLog("开始监听");
 }
 
 void CNode::start_scan()
@@ -468,6 +479,7 @@ void CNode::handle_accept(session* new_session,
 {
 	if (!error)
 	{
+		AddLog("接受连接");
 		new_session->start();
 	}
 	else

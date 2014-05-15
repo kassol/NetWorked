@@ -14,7 +14,7 @@
 
 // CNetWorkedDlg ¶Ô»°¿ò
 
-int CNetWorkedDlg::_nPort = 8991;
+int CNetWorkedDlg::_nPort = 8992;
 int CNetWorkedDlg::_nPackageSize = 1500;
 
 void run_service(boost::asio::io_service& service);
